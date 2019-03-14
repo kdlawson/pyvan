@@ -1,0 +1,20 @@
+================================================================================
+Title: Light Curve Templates and Galactic Distribution of RR Lyrae Stars 
+       from Sloan Digital Sky Survey Stripe 82 
+Authors: Sesar B., Ivezic I., Grammer S.H., Morgan D.P., Becker A.C., Juric M.,
+         Lee N.D., Annis J., Beers T.C., Fan X., Lupton R.H., Gunn J.E., 
+         Knapp G.R., Jiang L., Jester S., Johnston D.E., Lampeitl H. 
+================================================================================
+Description of contents: This archive contains ugriz RR Lyrae template light 
+    curves.  The number in the filename corresponds to the template ID in 
+    Table 2 and the letter identifies the band.
+
+Byte-by-byte Description of files: *.dat
+--------------------------------------------------------------------------------
+   Bytes Format Units Label   Explanations
+--------------------------------------------------------------------------------
+   1-  5  F5.3   ---  phase   Template light curve phase
+   7- 11  F5.3   ---  value   Template value
+--------------------------------------------------------------------------------
+
+================================================================================

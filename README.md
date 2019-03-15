@@ -14,10 +14,10 @@ import pickle
 import numpy as np
 import pyvan.pyvan as pyvan
 lightcurves = pickle.load(open('lightcurves.p', 'rb' ) )
-# a pickled list where each entry is a numpy structured array with column keys: 'mjd', 'mag', 'magErr' (time, magnitude, and mag error)
+#a pickled list where each entry is a numpy structured array with column keys: 'mjd', 'mag', 'magErr' (time, magnitude, and mag error)
 tar_fits = pyvan.fit(lightcurves, n_cores=3, filt='g')
-# fits all entries in 'lightcurves' for default templates using 3 processor cores and g-band filters where applicable (RR Lyrae in this case)
-# This results in a dictionary containing an entry for each target. 
+#fits all entries in 'lightcurves' for default templates using 3 processor cores and g-band filters where applicable (RR Lyrae in this case)
+#This results in a dictionary containing an entry for each target. 
 
 --------------------------------------------------------------------
 

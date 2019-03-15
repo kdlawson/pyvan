@@ -103,7 +103,7 @@ def fit(lightcurves, n_cores, filt, threshold=_default_failure_threshold, templa
         different user-defined function if not using flare, quiet, and at least a third template (RR Lyr by default),
         or even potentially if working with very different data quality.
 
-    templates : list
+    templates : list, optional
         Templates to be fit to the light-curve. Entries may be: a string for a default template ("flare", "quiescent",
         or "rrlyrae"), a dictionary for user-defined templates to be fit using PyVAN's generalized template fitting
         procedure (fit_general()), or a callable for templates to be fit according to a user-defined procedure. Note:
@@ -277,7 +277,7 @@ def fit_target(data, obj_id, templates, filt, flare_cand_fn=get_cands, threshold
 def fit_general(data, fn, bounds, args):
     """
     Function carrying out generalized procedure for fitting a user-provided template. NOTE: Currently, for reasons that
-    are unclear to me, anything being called within your "fn" or "bounds" functions needs to be imported within your
+    are unclear to me, any functions being called within your "fn" or "bounds" functions needs to be imported within your
     functions. i.e., if your bounds are defined by "my_bounds", which makes a call somewhere to a numpy function, you
     would need to do something like:
 
@@ -334,6 +334,11 @@ def parse_lc_file_to_list(lc_path, dtypes=None, oid_col='obj_id', time_col='mjd'
     errors, and observation times. In order to be prepared using this function, they must also have an entry providing
     a unique integer identifier for the target.
 
+    Note: We explicitly define dtypes because numpy will otherwise assume a dtype of 'int' for the 'obj_id' column for
+    light-curves from the Large Survey Database, whose entries are sometimes too long for this datatype. I don't believe
+    there is currently a way to dictate only a single column's data-type when reading in a numpy structured array, so
+    here we are.
+
     Parameters
     ----------
     lc_path : string
@@ -365,7 +370,7 @@ def parse_lc_file_to_list(lc_path, dtypes=None, oid_col='obj_id', time_col='mjd'
         dtypes = [('ra', '<f8'), ('dec', '<f8'), ('mjd', '<f8'), ('obj_id', np.uint64), ('fid', '<f8'), ('mag', '<f8'),
                   ('magErr', '<f8'), ('limMag', '<f8'), ('pid', '<i8'), ('det_zp', '<f8')]
 
-    observations = np.genfromtxt(lc_path, names=True, dtype=dtypes)
+    observations = np.genfromtxt(lc_path, dtype=dtypes, skip_header=True)
     observations.sort(order=[oid_col, time_col], axis=0)
     lightcurves = np.split(observations, np.where(np.diff(observations[oid_col]) != 0)[0] + 1)
 

@@ -26,3 +26,6 @@ tar_fits = pyvan.fit(lightcurves, n_cores=3, filt='g')\
 --------------------------------------------------------------------
 
 Each target's entry in the dictionary resulting above contains information regarding each of its fits (i.e. tar_fits[0]['flare'] contains information for the 1st light-curve's flare fit) and the comparison metrics for those fits (tar_fits[0]['rel_fit'], where flare-quiescent is the difference of the best-fit log likelihoods for those templates). Happy to help if anyone has questions.
+
+
+Take a look in the "examples" directory for a Jupyter Notebook walkthrough of the basic functionalities!

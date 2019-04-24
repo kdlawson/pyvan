@@ -2,8 +2,10 @@
 
 # https://github.com/kdlawson/pyvan
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import numpy as np
 import lmfit
+import warnings
 import pickle
 import glob
 import multiprocessing
@@ -13,8 +15,13 @@ from scipy.interpolate import interp1d
 from scipy.optimize import curve_fit
 from copy import deepcopy
 from joblib import Parallel, delayed
-
+from scipy.stats import gaussian_kde, linregress
+import numpy as np
+from matplotlib.widgets import Button
+warnings.filterwarnings(action='ignore', category=UserWarning, module='lmfit')
+# Suppresses an erroneous UserWarning from LMFit indicating that a keyword argument is being ignored when it isn't
 NoneType = type(None)
+
 def med_abs_dev(arr):
     """
     Computes the scaled median absolute deviation of an array. This is a measure of sample variance robust to outlier
@@ -64,23 +71,26 @@ def _default_failure_threshold(target_fits):
     Default threshold function for truncating fitting on a target. Value of dl_fq_threshold is based on analysis in
     Lawson+(2019). Returns True if the procedure is to skip further fits. Additionally requires that the flare fit
     completed -- i.e. that at least one flare event candidate was found according to the function supplied by
-    'flare_cand_fn'.
+    'flare_cands'.
     """
     if 'flare' in target_fits:
         if not target_fits['flare']['fit']:
             return True  # If the flare fit has been attempted but failed (due to lack of candidates), returns True
         if 'quiescent' in target_fits:
-            dl_fq_threshold = 13.32  # Determined with simulation fitting, see: Lawson+(2019)
+            dl_fq_threshold = 10.44  # Determined with simulation fitting, see: Lawson+(2019)
             if target_fits['flare']['logL'] - target_fits['quiescent']['logL'] < dl_fq_threshold:
                 return True  # If the flare and quiet fit have completed but fall below threshold dl_fq value, returns True
     return False
 
 def fit(lightcurves, n_cores, filt, threshold=_default_failure_threshold, templates=None, obj_ids=None,
-        fit_dict=None, flare_cand_fn=get_cands, expt=60.):
+        fit_dict=None, flare_cands=get_cands, expt=60.):
     """
     PyVAN's core process. This takes a list containing light-curves and fits them with templates as desired,
     distributing those light-curves among a specified number of cores, and either appending the results to a given
     dictionary or creating a new dictionary to house them.
+
+    NOTE: If you're just fitting a single target of interest, it's probably easier to use the pyvan.fit_target
+    function
 
     Parameters
     ----------
@@ -88,7 +98,7 @@ def fit(lightcurves, n_cores, filt, threshold=_default_failure_threshold, templa
         List of numpy structured arrays for each unique object to be fit with templates.
 
     n_cores : int
-        The number of processor cores for PyVAN to utilize.
+        The number of cores for PyVAN to utilize.
 
     filt : str
         Label for the filter to be utilized in RR Lyr template fitting. If RR Lyr fitting is not being used, "None" will
@@ -122,7 +132,7 @@ def fit(lightcurves, n_cores, filt, threshold=_default_failure_threshold, templa
         list of their identifiers as "obj_ids". The new fits will then overwrite the old entries in the dictionary,
         leaving others intact
 
-    flare_cand_fn : callable, optional
+    flare_cands : callable, optional
         A function that takes 'data' as it's argument, and returns a list of flare candidate indices for data. Set to
         'None' if not fitting for flares. If you're fitting some other template that requires specific candidate
         observations, it is recommended to use the option for passing a complete template fitting function as a template
@@ -155,7 +165,7 @@ def fit(lightcurves, n_cores, filt, threshold=_default_failure_threshold, templa
             "If the list of templates to be fit contains 'rrlyrae' (default), filter cannot be set to 'None'."
             "Default filter options are 'u', 'g', 'r', 'i', or 'z'")
     results = Parallel(n_jobs=n_cores)(
-        delayed(fit_target)(data, obj_id, templates, filt, flare_cand_fn, threshold, expt)
+        delayed(fit_target)(data, filt, threshold, templates, obj_id, flare_cands, expt)
         for data, obj_id in zip(lightcurves, obj_ids))
     for target in results:
         if target['fit']:
@@ -165,7 +175,7 @@ def fit(lightcurves, n_cores, filt, threshold=_default_failure_threshold, templa
 
     return fit_dict
 
-def fit_target(data, obj_id, templates, filt, flare_cand_fn=get_cands, threshold=_default_failure_threshold,
+def fit_target(data, filt, threshold=_default_failure_threshold, templates=None, obj_id=None, flare_cands=get_cands,
                expt=60.):
     """
     Carries out fitting of the requested templates on a light-curve. Use pyvan.fit() to fit many targets at once with
@@ -176,28 +186,12 @@ def fit_target(data, obj_id, templates, filt, flare_cand_fn=get_cands, threshold
     data : structured ndarray
         Light-curve data in structured numpy array, with columns for (at least): time, magnitude, and magnitude error.
 
-    obj_id : int OR string
-        Unique identifier corresponding to the target being fit.
-
-    templates : list
-        Templates to be fit to the light-curve. Entries may be: a string for a default template ("flare", "quiescent",
-         or "rrlyrae"), a dictionary for user-defined templates to be fit using PyVAN's generalized template fitting
-         procedure (fit_general()), or a callable for templates to be fit according to a user-defined procedure. Note:
-         if defining your own procedure, the dictionary returned must also contain a name for the function (str) under
-         the key 'name'. This is the key under which the fit dictionary for that template will be stored.
-
     filt : str
         Label for the filter to be utilized in RR Lyr template fitting. If RR Lyr fitting is not being used, "None" will
         be accepted. Default filters include: 'u', 'g', 'r', 'i', 'z'. See docstring for pyvan.make_template_dict() for
         information on adding your own filter templates. Will update soon such that 'filter' will also be passed to
         fit_general and a user defined fitting function to allow filter dependant templates to be used accordingly.
 
-    flare_cand_fn : callable, optional
-        A function that takes 'data' as it's argument, and returns a list of flare candidate indices for data. Set to
-        'None' if not fitting for flares. If you're fitting some other template that requires specific candidate
-        observations, it is recommended to use the option for passing a complete template fitting function as a template
-        to PyVAN. In this function, you can then check for candidates, returning a null fit if none are identified (as in
-        the procedure for flares, see: pyvan.fit_flares())
 
     threshold : callable, optional
         A function to which the current dictionary of fit templates is passed after each is completed, returning True if
@@ -205,6 +199,24 @@ def fit_target(data, obj_id, templates, filt, flare_cand_fn=get_cands, threshold
         value of dl_fq is too small, or if no flare candidates were identified. This should be changed to None or a
         different user-defined function if not using flare, quiet, and at least a third template (RR Lyr by default),
         or even potentially if working with very different data quality.
+
+    templates : list, optional
+        Templates to be fit to the light-curve. Entries may be: a string for a default template ("flare", "quiescent",
+         or "rrlyrae"), a dictionary for user-defined templates to be fit using PyVAN's generalized template fitting
+         procedure (fit_general()), or a callable for templates to be fit according to a user-defined procedure. Note:
+         if defining your own procedure, the dictionary returned must also contain a name for the function (str) under
+         the key 'name'. This is the key under which the fit dictionary for that template will be stored. Uses
+         ["flare", "quiescent", "rrlyrae"] by default.
+
+    obj_id : int OR string, optional
+        Unique identifier corresponding to the target being fit.
+
+    flare_cands : callable, optional
+        A function that takes 'data' as it's argument, and returns a list of flare candidate indices for data. Set to
+        'None' if not fitting for flares. If you're fitting some other template that requires specific candidate
+        observations, it is recommended to use the option for passing a complete template fitting function as a template
+        to PyVAN. In this function, you can then check for candidates, returning a null fit if none are identified (as in
+        the procedure for flares, see: pyvan.fit_flares())
 
     expt : float, optional
         The exposure time in seconds for observations in the light-curve. This parameter is only used for informing the
@@ -220,7 +232,7 @@ def fit_target(data, obj_id, templates, filt, flare_cand_fn=get_cands, threshold
             'rel_fit', dict - contains the differences of all fit template log-likelihoods, keyed as
                 'template_i-template_j'
 
-            'expt', float -  the exposure time specified by the user for the fitting
+            'expt', float - the exposure time specified by the user for the fitting
 
             'obj_id', int OR string - the unique identifier given for the object. This is used as the key for the target
                 in the dictionary containing all of the targets that were fit, and then removed (This is done to handle
@@ -234,6 +246,10 @@ def fit_target(data, obj_id, templates, filt, flare_cand_fn=get_cands, threshold
     """
     n_templates_fit = 0
     target_fits = {}
+
+    if isinstance(templates, NoneType):
+        templates = np.array(['flare', 'quiescent', 'rrlyrae'])
+
     threshold_fail = False
     for template, i in zip(templates, range(len(templates))):
         if threshold_fail:
@@ -247,7 +263,7 @@ def fit_target(data, obj_id, templates, filt, flare_cand_fn=get_cands, threshold
             template_fit = fit_general(data, template['fn'], template['bounds'], template['args'])
             template = templates[i] = template['name']
         elif template == 'flare':
-            template_fit = fit_flares(data, expt=expt, flare_cand_fn = flare_cand_fn, N_concurrent = 3)
+            template_fit = fit_flares(data, expt=expt, flare_cands = flare_cands, N_concurrent = 3)
         elif template == 'quiescent':
             template_fit = fit_quiescence(data)
         elif template == 'rrlyrae':
@@ -270,7 +286,8 @@ def fit_target(data, obj_id, templates, filt, flare_cand_fn=get_cands, threshold
     target_fits['data'] = data
     target_fits['rel_fit'] = rel_fits
     target_fits['expt'] = expt
-    target_fits['obj_id'] = obj_id
+    if not isinstance(obj_id, NoneType):
+        target_fits['obj_id'] = obj_id
     target_fits['fit'] = (True if n_templates_fit > 0 else False)  # To later dump targets that weren't fit for any templates
     return target_fits
 
@@ -307,8 +324,8 @@ def fit_general(data, fn, bounds, args):
     Returns
     -------
     : dict
-        Dictionary containing the best-fit chi-squared, log-likelihood, params, and 'fit'-- a boolean indicating that the
-        fit was performed.
+        Dictionary containing the best-fit chi-squared, log-likelihood and params, a copy of the input fitting function,
+        and 'fit'-- a boolean indicating that the fit was performed.
     """
     model = lmfit.Model(fn)
     if callable(bounds):
@@ -322,7 +339,7 @@ def fit_general(data, fn, bounds, args):
     result = model.fit(data['mag'], t=data['mjd'], weights=1. / data['magErr'], method='differential_evolution')
     fit_params = np.array([result.best_values[arg] for arg in args])
     chisq = result.chisqr
-    return {'chisq': chisq, 'logL': log_likelihood(chisq, len(data)), 'params': fit_params, 'fit': True}
+    return {'chisq': chisq, 'logL': log_likelihood(chisq, len(data)), 'params': fit_params, 'fit': True, 'fn': fn}
 
 def parse_lc_file_to_list(lc_path, dtypes=None, oid_col='obj_id', time_col='mjd', return_oids=True):
     """
@@ -347,7 +364,7 @@ def parse_lc_file_to_list(lc_path, dtypes=None, oid_col='obj_id', time_col='mjd'
     dtypes : list, optional
         A list of tuples, with one tuple corresponding to each column of the file. If not specified, assumes the format
         for PTF outputs from the Large Survey Database used in Lawson+(2019): 10 columns corresponding to RA, Dec, MJD,
-        Object ID, Filter ID, magnitude, magnitude error, limiting mag, processed image ID, and det. zero-point.
+        Object ID, Filter ID, magnitude, magnitude error, limiting mag, PID, and det. zero-point.
 
     oid_col : string, optional
         Label in 'dtypes' that corresponds to the integer identifier that delineates different targets
@@ -405,6 +422,7 @@ def find_apparent_peak_indices(data, peak_candidates):
         peak_list.append(peak_index)
     return peak_list
 
+
 def tighten_flare_fit(input_fit_dict, copy=True):
     """
     Can be used to refit a flare template to achieve the smallest amplitude fit that achieves approximately the same
@@ -416,36 +434,43 @@ def tighten_flare_fit(input_fit_dict, copy=True):
         fit_dict = input_fit_dict
     data = fit_dict['data']
     peaks = fit_dict['flare']['peaks']
-    expt = fit_dict['expt'] / (3600.*24.)
+    expt = fit_dict['expt'] / (3600. * 24.)
     fit_params = fit_dict['flare']['params']
-    m0_init, m0_err, t0_init, dt_init, dm_init = initialize_flare_params(data, peaks) 
+    m0_init, m0_err, t0_init, dt_init, dm_init = initialize_flare_params(data, peaks)
 
     n = len(peaks)
     full_chisq = fit_dict['flare']['chisq']
-    
+
     new_params = np.copy(fit_params)
     for i in range(n):
-        wo_params = np.append(fit_params[0:i*3+1], fit_params[i*3+4:])
+        wo_params = np.append(fit_params[0:i * 3 + 1], fit_params[i * 3 + 4:])
         temp_dict = {'flare': {}, 'data': data}
         temp_dict['flare']['params'] = wo_params
         _, current_model = get_flare_model(temp_dict)
         wo_chisq = chi_squared(data['mag'], current_model, data['magErr'])
         chisq_contr = wo_chisq - full_chisq
-        weights = np.copy(1./data['magErr'])
+        weights = np.copy(1. / data['magErr'])
         suppressed_peaks = peaks[peaks != peaks[i]]
         weights[suppressed_peaks] = 0
-        for j in np.linspace(0.0001,5,20):
+        for j in np.linspace(0.0001, 5, 20):
             fmodel = lmfit.Model(_flarefn)
-            fmodel.set_param_hint('t0', vary = True, value = t0_init[i], min = (t0_init[i] - 0.08), max = (t0_init[i] + dt_init[i] - expt))
+            fmodel.set_param_hint('t0', vary=True, value=t0_init[i], min=(t0_init[i] - 0.08),
+                                  max=(t0_init[i] + dt_init[i] - expt))
             dm_min = 0.
             dm_max = ((dm_init[i] + j) if (dm_init[i] + j) > dm_min else dm_min + 0.0001)
-            fmodel.set_param_hint('dm', vary = True, value = dm_init[i], min = 0, max = dm_max)
-            fmodel.set_param_hint('dt', vary = True, value = dt_init[i], min = expt/5., max = 0.055)
-            result = fmodel.fit(data['mag'], t= data['mjd'], weights = 1./data['magErr'], method = 'differential_evolution', model_in = current_model)
-            if wo_chisq - result.chisqr >= chisq_contr*0.999:
-                new_params[i*3+1:i*3+4] = [result.best_values['t0'], result.best_values['dt'], result.best_values['dm']]
+            fmodel.set_param_hint('dm', vary=True, value=dm_init[i], min=0, max=dm_max)
+            fmodel.set_param_hint('dt', vary=True, value=dt_init[i], min=expt / 5., max=0.055)
+            result = fmodel.fit(data['mag'], t=data['mjd'], weights=1. / data['magErr'],
+                                method='differential_evolution', model_in=current_model)
+            if wo_chisq - result.chisqr >= chisq_contr * 0.999:
+                new_params[i * 3 + 1:i * 3 + 4] = [result.best_values['t0'], result.best_values['dt'],
+                                                   result.best_values['dm']]
                 break
+
     fit_dict['flare']['params'] = new_params
+    _, new_model = get_flare_model(fit_dict, high_res=False)
+    fit_dict['flare']['chisq'] = chi_squared(data['mag'], new_model, data['magErr'])
+    fit_dict['flare']['logL'] = log_likelihood(fit_dict['flare']['chisq'], len(data))
     return fit_dict
 
 def finer_time_resolution(params, data):
@@ -535,11 +560,9 @@ def quiescence(t, qui):
     : 1-d array
         The quiescent array corresponding to t
     """
-
     return np.repeat(qui, len(t))
 
 def _flarefn(t, t0, dt, dm, **kwargs):
-    
     """
     Used internally by the main flare fitting algorithm ('fit_flares') to iteratively
     append flares (in excess of the N_concurrent parameter in fit_flares) to the previous model,
@@ -606,7 +629,7 @@ def _N_flare_model(t, m0, **model_pars):
     Computes a composite flare model for given time array, quiescent magnitude,
     and set of flare parameters. 
     
-    Used in fitting and plotting functions (fit_flares and get_flare_model). 
+    Used in fitting and plotting functions (pyvan.fit_flares and pyvan.get_flare_model).
     
     Parameters
     ----------
@@ -650,7 +673,7 @@ def _N_flare_model(t, m0, **model_pars):
     
     return flare_model
 
-def fit_flares(data, expt, flare_cand_fn = get_cands, N_concurrent = 3):
+def fit_flares(data, expt, flare_cands = get_cands, N_concurrent = 3):
     """
     Carries out fitting of all flare candidates in a target light-curve.
 
@@ -663,22 +686,31 @@ def fit_flares(data, expt, flare_cand_fn = get_cands, N_concurrent = 3):
         The exposure time in seconds for observations in the light-curve. This parameter is only used for informing the
         bounds some of the flare parameters.
 
-    flare_cand_fn : callable, optional
-        A function that takes 'data' as it's argument, and returns a list of flare candidate indices for data. Default
-        option is as utilized in Lawson+(2019)
+    flare_cands : callable or ndarray, optional
+        If callable: A function that takes 'data' as its argument, and returns an array of candidate flare peak indices
+        for the data. If ndarray: an array of indices corresponding to candidate flare peaks in "data". These indices
+        should be arranged in the order that you want them fit; i.e. if you leave "N_concurrent" as 3, the first 3
+        indices in this array will be fit at one time, and any subsequent candidates are appended to the resulting model
+        thereafter. Generally, you probably want your largest amplitude candidates first. Default option is a function
+        identifying candidates as described in Lawson+(2019).
 
     N_concurrent: int, optional
         The number of flare events to fit simultaneously. A light-curve with many events will take a LONG time to fit if
         this parameter is changed to a large number. Alternatively, if too low, may allow a single event to determine a
-        quiescent magnitude that fits poorly to all other targets. In practice with PTF data, the default value of 3
-        seemed to be the sweet spot.
+        quiescent magnitude that fits poorly to all other events. In practice with PTF data, the default value of 3
+        seemed to be the sweet spot. May warrant more consideration if you're fitting data with a large number of
+        candidates per light-curve, or with a huge number of observations overall. This could also be used for fitting
+        a single complex flare event.
 
     Returns
     -------
     : dict
         A dictionary containing information regarding the achieved fit.
     """
-    peaks = flare_cand_fn(data)
+    if callable(flare_cands):
+        peaks = flare_cands(data)
+    else:
+        peaks = flare_cands
     if len(peaks) == 0:
         return {'fit': False, 'logL': np.nan}
     expt = expt / 86400. # Converting from seconds to days
@@ -779,20 +811,62 @@ def initialize_flare_params(data, peaks):
     return m0, m0_err, t0, dt, dm
 
 def analytic_rrlyrae(t, t0, m0, dt, dm):
+    """
+    Used by fit_rrlyrae to evaluate an RR Lyrae model using a template globally defined in fit_rrlyrae. You probably
+    want to use rrlyrae_with_template instead for plotting/inspection.
 
+    Parameters
+    ----------
+    t : 1-d array_like
+        The array of time values for which to evaluate the RR Lyrae model
+
+    t0 : float
+        Oscillation period starting point in days. This is somewhat like the phase of the model, just serving to shift
+        the oscillations left or right in time
+
+    m0 : float
+        "Base" magnitude for the RR Lyrae template. This is just the magnitude level corresponding to the
+        dimmest point in the oscillations
+
+    dt : float
+        Period of oscillation in days
+
+    dm : float
+        Amplitude of oscillations from m0
+
+    Returns
+    -------
+    : ndarray
+        Magnitudes for the RR Lyrae model
+    """
     T = (t - t0) % dt / dt
     y = fn(T)
     return dm*(y-1.) + m0
 
 def rrlyrae_with_template(t, params, template):
     """
-    Used for plotting RR Lyrae fits
+    Used for plotting RR Lyrae fits.
+
+    Parameters
+    ----------
+    t : 1-d array_like
+        The array of time values for which to evaluate the RR Lyrae model
+
+    params : array-like
+        Set of parameters at which to evaluate the template [t0, m0, dt, dm]
+
+    Returns
+    -------
+    : ndarray
+        Magnitudes for the RR Lyrae model
     """
-    global fn
     for filt in rrl_template_dict:
         if template in rrl_template_dict[filt].keys():
             fn = rrl_template_dict[filt][template]
-    return analytic_rrlyrae(t, *params)
+    t0, m0, dt, dm = params
+    T = (t - t0) % dt / dt
+    y = fn(T)
+    return dm*(y-1.) + m0
 
 def rrl_bounds(data):
     """
@@ -994,7 +1068,7 @@ def make_template_dict():
     fn_dict = {}
     for filt in filters:
         fn_dict[filt] = {}
-        template_files = glob.glob('rrlyr_templates/*'+filt+'.dat')
+        template_files = glob.glob(data_path+'*'+filt+'.dat')
         template_ids, t_idx = sort_template_ids([x.split('/')[-1].split('.')[0] for x in template_files], return_index = True)
         template_files = np.asarray(template_files)[t_idx]
         fn_dict[filt]['ordered_keys'] = template_ids
@@ -1007,7 +1081,8 @@ def make_template_dict():
 
 def sort_template_ids(template_ids, return_index = True):
     """
-    Sorts template IDs to flow well in terms of steepness --- helps pyvan.fit_rrlyrae() converge well.
+    Sorts template IDs to flow well in terms of steepness --- helps pyvan.fit_rrlyrae() converge well, and improves
+    efficiency quite a bit (over just using differential evolution to fit each template individually).
     """
     template_nums = np.array([int(tid[:-1]) for tid in template_ids])
     tn_idx = np.argsort(template_nums)[::-1]
@@ -1016,3 +1091,365 @@ def sort_template_ids(template_ids, return_index = True):
     return np.asarray(template_ids)[tn_idx]
 
 rrl_template_dict = make_template_dict()
+
+NoneType = type(None)
+
+def save_buttons(buttons):
+    global button_save
+    button_save = buttons
+
+
+def plot_all_fits(tar_fit, high_res=True, templates=None, xrange=None, yrange=None, donor_lightcurve=None):
+    """
+    Takes the fit dictionary for a target and displays a light-curve along with widget buttons to overlay any desired
+    model fits. Best used in a Jupyter Notebook (I have not tested this in other environments!). Make sure to enable
+    matplotlib interactive mode in your notebook before you begin, e.g.:
+
+        import matplotlib.pyplot as plt
+        %matplotlib notebook
+
+        pyvan.plot_all_fits(my_target_tar_fit)
+
+    Also displays the log-likelihood value for each template on its respective button.
+
+    Parameters
+    ----------
+    tar_fit : dict
+        A dictionary of PyVAN fit information for a single target. i.e. the product of pyvan.fit_target
+
+    high_res : bool, optional
+        If True, will evaluate the best-fit models at very fine time resolution to produce smooth models. If False,
+        evaluates models at the observation timestamps.
+
+    templates : list, optional
+        A list of templates for which to display models. Elements may be: strings for default templates ('flare',
+        'quiescent', and 'rrlyrae') or for fits computed using the pyvan.fit_general function. In the latter case, the
+        string should match the key for the template's fit in "tar_fit". You may also use this option if you've written
+        your own template fitting procedure, so long as the resulting dictionary for the template includes the key 'fn',
+        corresponding to the template function which takes arguments as: "fn(times, *params)" and returns the model
+        evaluated at those times and with those parameters. The dictionary also needs to have key 'logL' corresponding
+        to the float log-likelihood for the best-fit template, and 'fit', a boolean indicating that the template fit was
+        successfully completed. Alternatively, each entry can be a dictionary (like the ones passed into pyvan.fit or
+        pyvan.fit_target for fitting via the pyvan.fit_general procedure). This allows including the additional key
+        'plot_sampling'- callable, array-like or integer. If callable: a function which takes "fit dict" as its
+        argument, and returns an array of time values at which to evaluate the template. If array-like: evaluates the
+        template at these times. If integer: generates this many evenly spaced times between the smallest and largest
+        times in the 'data' array. Note: to avoid more clever solutions for how to space buttons, this function will
+        only display 7 templates at a time. If passed more than 7 entries in "templates", the list is truncated to only
+        the display the first 7. Default is 'None', which simply plots the default templates.
+
+    xrange : tuple, optional
+        Tuple containing minimum and maximum x-axis values as (xmin,xmax) for framing the plot. By default, the extent
+        of the best-fitting template determines this boundary
+
+    yrange : tuple, optional
+        Tuple containing minimum and maximum y-axis values as (ymin,ymax) for framing the plot. By default, the extent
+        of the best-fitting template determines this boundary. Note: if you want an inverted magnitude axis, simply
+        invert your tuple.
+
+    donor_lightcurve : structured ndarray, optional
+        If you're plotting fits to a "simulated" light-curve (as utilized in Lawson+(2019)), you can pass in the
+        original "donor" light-curve as well to see it plotted alongside your fits and simulated data. Defaults to None.
+
+    Returns
+    -------
+
+    """
+    if isinstance(templates, NoneType):
+        templates = np.array(['flare', 'quiescent', 'rrlyrae'])
+    border_width = 1.5
+    data = tar_fit['data']
+    if len(templates) > 7:
+        Nbuttons = 8
+        templates = templates[:7]
+    else:
+        Nbuttons = len(templates) + 1
+    label_list = ['Clear']
+    t_list = [[]]
+    y_list = [[]]
+    logL_arr = np.array([-np.inf])
+    for template in templates:
+        t_template, y_template = [], []
+        if isinstance(template, dict):
+            template_label = template['name']
+            logL_arr = np.append(logL_arr, tar_fit[template_label]['logL'])
+            if tar_fit[template_label]['fit']:
+                if 'plot_sampling' in template:
+                    if callable(template['plot_sampling']):
+                        t_template = template['plot_sampling'](tar_fit)
+                    elif type(template['plot_sampling']) == int:
+                        t_template = np.linspace(np.min(data['mjd']), np.max(data['mjd']), template['plot_sampling'])
+                    elif type(template['plot_sampling']) == np.ndarray or type(template['plot_sampling']) == list:
+                        t_template = np.asarray(template['plot_sampling'])
+                    else:
+                        raise TypeError(
+                            'Template dictionary key "plot_sampling" (if specified) must either refer to: a callable, '
+                            'an integer, or an array-like of times')
+                elif high_res:
+                    t_template = np.linspace(np.min(data['mjd']), np.max(data['mjd']), 500000)
+                else:
+                    t_template = data['mjd']
+                y_template = template['fn'](t_template, *tar_fit[template['name']]['params'])
+        elif template == 'flare':
+            template_label = 'Flare'
+            logL_arr = np.append(logL_arr, tar_fit[template]['logL'])
+            if tar_fit[template]['fit']:
+                t_template, y_template = get_flare_model(tar_fit, high_res=high_res)
+        elif template == 'quiescent':
+            template_label = 'Quiescent'
+            logL_arr = np.append(logL_arr, tar_fit[template]['logL'])
+            if tar_fit[template]['fit']:
+                t_template = np.array([data['mjd'].min(), data['mjd'].max()])
+                y_template = quiescence(t_template, tar_fit[template]['param'])
+        elif template == 'rrlyrae':
+            template_label = 'RR Lyrae'
+            logL_arr = np.append(logL_arr, tar_fit[template]['logL'])
+            if tar_fit[template]['fit']:
+                if high_res:
+                    t_template = np.linspace(data['mjd'].min(), data['mjd'].max(), 500000)
+                else:
+                    t_template = data['mjd']
+                y_template = rrlyrae_with_template(t_template, tar_fit[template]['params'],
+                                                   tar_fit[template]['template'])
+        elif type(template) == str:
+            if template not in tar_fit or 'fn' not in tar_fit[template]:
+                raise ValueError(
+                    'If an item in "templates" is a string, it must either be a default template ("flare", '
+                    '"quiescent", or "rrlyrae"), or must be a key for "tar_fit" corresponding to a dictionary'
+                    'containing the template function for key "fn"')
+            template_label = template
+            logL_arr = np.append(logL_arr, tar_fit[template]['logL'])
+            if tar_fit[template]['fit']:
+                if high_res:
+                    t_template = np.linspace(data['mjd'].min(), data['mjd'].max(), 500000)
+                else:
+                    t_template = data['mjd']
+                y_template = tar_fit[template]['fn'](t_template, *tar_fit[template]['params'])
+        else:
+            raise TypeError(
+                'Entries of argument "templates" must either be: a string corresponding to a fit dictionary '
+                'contained within "tar_fit", or a dictionary. See documentation for details.')
+        t_list.append(t_template)
+        y_list.append(y_template)
+        label_list.append(template_label)
+
+    fleft, fbottom, ftop, fright = 0.15, 0.15, 0.85, 0.785
+    axis_color = 'ghostwhite'
+    fig = plt.figure(figsize=(18, 5))
+    ax = fig.add_subplot(111)
+    fig.subplots_adjust(left=fleft, bottom=fbottom, top=ftop, right=fright)
+
+    if isinstance(donor_lightcurve, NoneType):
+        ncol = 2
+        ax.scatter(data['mjd'], data['mag'], s=80, c='dimgray', edgecolor='black', linewidth=2., zorder=3,
+                   label='Target Data')
+        ax.errorbar(data['mjd'], data['mag'], yerr=data['magErr'], linestyle="None", c='black', zorder=2, capthick=2,
+                    capsize=10, elinewidth=2)
+
+    elif isinstance(donor_lightcurve, np.ndarray):
+        ncol = 3
+        ax.scatter(donor_lightcurve['mjd'], donor_lightcurve['mag'], c='black', alpha=0.75, s=4, zorder=0)
+        ax.scatter([], [], c='k', alpha=0.75, s=35,
+                   label='Original Donor Data')  # Dummy plot to produce a more visible point for the key
+        ax.scatter(data['mjd'], data['mag'], s=100, c='lightgrey', edgecolor='black', linewidth=2, zorder=3,
+                   label='Simulated Data')
+        ax.errorbar(data['mjd'], data['mag'], yerr=data['magErr'], linestyle="None", c='black', zorder=2, capthick=2,
+                    capsize=10, elinewidth=2)
+
+    best = np.argmax(logL_arr)
+    [line] = ax.plot(t_list[best], y_list[best], c='orange', lw=2., label='Fit to Data', zorder=1, alpha=0.8)
+
+    def _button_0_on_clicked(mouse_event):
+        line.set_xdata([])
+        line.set_ydata([])
+        fig.canvas.draw_idle()
+
+    def _button_1_on_clicked(mouse_event):
+        line.set_xdata(t_list[1])
+        line.set_ydata(y_list[1])
+        fig.canvas.draw_idle()
+
+    def _button_2_on_clicked(mouse_event):
+        line.set_xdata(t_list[2])
+        line.set_ydata(y_list[2])
+        fig.canvas.draw_idle()
+
+    def _button_3_on_clicked(mouse_event):
+        line.set_xdata(t_list[3])
+        line.set_ydata(y_list[3])
+        fig.canvas.draw_idle()
+
+    def _button_4_on_clicked(mouse_event):
+        line.set_xdata(t_list[4])
+        line.set_ydata(y_list[4])
+        fig.canvas.draw_idle()
+
+    def _button_5_on_clicked(mouse_event):
+        line.set_xdata(t_list[5])
+        line.set_ydata(y_list[5])
+        fig.canvas.draw_idle()
+
+    def _button_6_on_clicked(mouse_event):
+        line.set_xdata(t_list[6])
+        line.set_ydata(y_list[6])
+        fig.canvas.draw_idle()
+
+    def _button_7_on_clicked(mouse_event):
+        line.set_xdata(t_list[7])
+        line.set_ydata(y_list[7])
+        fig.canvas.draw_idle()
+
+    def _button_8_on_clicked(mouse_event):
+        line.set_xdata(t_list[8])
+        line.set_ydata(y_list[8])
+        fig.canvas.draw_idle()
+
+    button_fns = [_button_0_on_clicked, _button_1_on_clicked, _button_2_on_clicked, _button_3_on_clicked,
+                  _button_4_on_clicked, _button_5_on_clicked, _button_6_on_clicked, _button_7_on_clicked,
+                  _button_8_on_clicked]
+
+    b_left, b_width, b_height = 0.8, 0.1, 0.075
+    b_gap = 0.015  # Space between buttons
+
+    mpt = fbottom + (ftop - fbottom) / 2.  # midpoint between ftop and fbottom
+    b_space = Nbuttons * b_height + (Nbuttons - 1) * b_gap
+
+    buttons = []
+    for i in np.arange(Nbuttons):
+        label = label_list[i]
+        if i > 0:
+            label += ' ($\ell =$' + str(np.round(logL_arr[i], 1)) + ')'
+        b_bottom = mpt - b_space / 2. + i * (b_height + b_gap)
+        button_ax = fig.add_axes([b_left, b_bottom, b_width, b_height])
+        [border.set_linewidth(border_width) for border in button_ax.spines.itervalues()]
+        button_i = Button(button_ax, label, color=axis_color, hovercolor='0.925')
+        button_i.on_clicked(button_fns[i])
+        buttons.append(button_i)
+
+    ax.set_xlabel("Time (days)", fontsize=16)
+    ax.set_ylabel("Magnitude", fontsize=16)
+    ax.tick_params(axis='both', which='major', labelsize=15)
+    ax.set_ylim(ax.set_ylim()[::-1])
+
+    ax.tick_params(axis='both', which='major', labelsize=14, right=True, top=True, direction='in', length=10,
+                   width=border_width, pad=5, zorder=0)
+    [border.set_linewidth(border_width) for border in ax.spines.itervalues()]
+
+    lgnd = ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=ncol, framealpha=1.,
+                     prop={'family': 'Serif', 'size': 12}, edgecolor='black', facecolor=axis_color, fancybox=False)
+    lgnd.get_frame().set_linewidth(border_width)
+
+    if not isinstance(xrange, NoneType):
+        ax.set_xlim(xrange[0], xrange[1])
+
+    if not isinstance(yrange, NoneType):
+        ax.set_ylim(yrange[0], yrange[1])
+
+    plt.show()
+    save_buttons(buttons)
+
+
+def logL_kde_scatter(fit_dict, x_param='flare-quiescent', y_param='flare-rrlyrae', marker_size=80, x_range=None,
+                     y_range=None, kde_cmap='Greens', xy_cut=None):
+    """
+    Takes a dictionary of fit targets, and generates a kernel density estimate colored scatter plot of two relative
+    log-likelihood metrics. Returns the figure and figure axis so users can append or alter anything not allowed
+    explicitly by argument options. Best used in a Jupyter Notebook, but may work fine via command line execution as
+    well.
+
+    Parameters
+    ----------
+    fit_dict : dict
+        dictionary of fits to targets resulting from pyvan.fit()
+
+    x_param : string, optional
+        string corresponding to a key in fit_dict[i]['rel_fit'] which will be used to fetch the array of x axis values
+        for plotting. By default, plots flare-quiescent along the x-axis.
+
+    y_param : string, optional
+        string corresponding to a key in fit_dict[i]['rel_fit'] which will be used to fetch the array of y axis values
+        for plotting. By default, plots flare-rrlyrae along the y-axis.
+
+    marker_size : int or float, optional
+        size for markers in the plot. For a KDE scatter plot you'll generally want larger markers than you might
+        normally use for Python scatter plots, since the issue of overlap is handled coloring points based on density.
+        Default value is 80.
+
+    x_range : tuple, optional
+        tuple as (xmin, xmax), the x-axis limits for the plot. Default is None.
+
+    y_range : tuple, optional
+        tuple as (ymin, ymax), the y-axis limits for the plot. Default is None.
+
+    kde_cmap : string
+        Name of matplotlib colormap to color the density axis in the plot. Default is 'Greens'.
+
+    xy_cut : tuple
+        Draws dashed lines at these values to delineate regions of the difference of log-likelihood space that will
+        survive cuts to eliminate contaminants. For the study conducted in Lawson+(2019), we found that flare-quiescent
+        and flare-rrlyrae cuts of 10.44 and 11.26 respectively produced a flare sample containing <1% of any contaminant
+        population tested. I could only conjecture as to how this might change (if at all) for groups utilizing data
+        with quality much better or worse than the PTF-quality data we utilized.
+
+    Returns
+    -------
+    fig : the matplotlib figure object
+
+    ax : matplotlib axis object onto which the scatter plot has been drawn.
+    """
+    border_width = 1.5
+    fig = plt.figure(figsize=(10.75, 10))
+    ax = fig.add_subplot(111)
+    fig.subplots_adjust(right=0.875)
+
+    x_arr, y_arr = np.array([]), np.array([])
+    for tar in fit_dict:
+        x_arr = np.append(x_arr, fit_dict[tar]['rel_fit'][x_param])
+        y_arr = np.append(y_arr, fit_dict[tar]['rel_fit'][y_param])
+
+    xy = np.vstack([x_arr, y_arr])
+    z = gaussian_kde(xy)(xy)  # Density values for each (x,y) pair
+
+    idx = z.argsort()  # Indices producing arrays sorted by z value of each (x,y,z)
+    x, y, z = x_arr[idx], y_arr[idx], z[idx] / z.max()  # Sorting arrays by previous line
+
+    ax.scatter(x, y, s=marker_size, c=z, cmap=kde_cmap, edgecolor='', norm=mpl.colors.Normalize(vmin=-0.2, vmax=1.))
+
+    ax.axhline(0., c='gray', alpha=0.5, zorder=3)
+    ax.axvline(0., c='gray', alpha=0.5, zorder=3)
+
+    if not isinstance(xy_cut, NoneType):
+        xcut, ycut = xy_cut
+        y_max = y_arr.max() if y_arr.max() >= ycut + 10 else ycut + 10
+        x_max = x_arr.max() if x_arr.max() >= xcut + 10 else xcut + 10
+
+        ax.plot(np.repeat(xcut, 2), np.array([ycut, y_max]), c='black', ls='dashed', zorder=3)
+        ax.plot(np.array([xcut, x_max]), np.repeat(ycut, 2), c='black', ls='dashed', zorder=3)
+
+    ax.tick_params(axis='both', which='major', right=True, top=True, labelsize=15, direction='in',
+                   width=border_width, length=8.5)
+
+    if not isinstance(x_range, NoneType):
+        ax.set_xlim(x_range[0], x_range[1])
+
+    if not isinstance(y_range, NoneType):
+        ax.set_ylim(y_range[0], y_range[1])
+
+    [border.set_linewidth(border_width) for border in ax.spines.itervalues()]
+
+    sct = ax.scatter([], [], c=[], cmap=kde_cmap, edgecolor='', norm=mpl.colors.Normalize(vmin=0.0, vmax=1.))
+    cb_ax = fig.add_axes([0.885, 0.11, 0.026, 0.77])
+    cbar = fig.colorbar(sct, cax=cb_ax)
+    cbar.set_label('Relative Density', fontsize=20)
+
+    cbar.set_ticks([0, 0.5, 1.0])
+    cbar.ax.tick_params(labelsize=16, direction='in', length=10, width=border_width)
+    cbar.outline.set_linewidth(border_width)
+    cbar.set_clim(0.0, 1.0)
+
+    xlab1, xlab2 = x_param.split('-')
+    ylab1, ylab2 = y_param.split('-')
+    ax.set_xlabel('$\ell_{' + xlab1 + '} - \ell_{' + xlab2 + '}$', fontsize=26)
+    ax.set_ylabel('$\ell_{' + ylab1 + '} - \ell_{' + ylab2 + '}$', fontsize=26)
+
+    return fig, ax

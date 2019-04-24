@@ -8,13 +8,26 @@ The black dashed line denotes the threshold above which < 1% of any contaminant 
 
 [Template fitting in action](ANIMS.md)
 
-A quick use example for the software (until I can get more proper examples online):
+--------------------------------------------------------------------
+## Installation
+
+Just clone this repository and install via 'setup.py', i.e. via command line:
+
+> `git clone https://github.com/kdlawson/pyvan`
+
+> `cd pyvan`
+
+> `pip install .`
+
+--------------------------------------------------------------------
+
+A quick use example for the software (or see a more in-depth example [here](examples/example_1.ipynb)):
 
 --------------------------------------------------------------------
 
 import pickle \
 import numpy as np \
-import pyvan.pyvan as pyvan \
+import pyvan.pyvan as pyvan
 
 lightcurves = pickle.load(open('lightcurves.p', 'rb' ) )\
 #a pickled list where each entry is a numpy structured array with column keys: 'mjd', 'mag', 'magErr' (time, magnitude, and mag error)
@@ -26,6 +39,3 @@ tar_fits = pyvan.fit(lightcurves, n_cores=3, filt='g')\
 --------------------------------------------------------------------
 
 Each target's entry in the dictionary resulting above contains information regarding each of its fits (i.e. tar_fits[0]['flare'] contains information for the 1st light-curve's flare fit) and the comparison metrics for those fits (tar_fits[0]['rel_fit'], where flare-quiescent is the difference of the best-fit log likelihoods for those templates). Happy to help if anyone has questions.
-
-
-Take a look in the "examples" directory for a Jupyter Notebook walkthrough of the basic functionalities!

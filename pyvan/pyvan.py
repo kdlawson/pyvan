@@ -304,16 +304,7 @@ def fit_target(data, filt, threshold=_default_failure_threshold, templates=None,
 
 def fit_general(data, fn, bounds, args):
     """
-    Function carrying out generalized procedure for fitting a user-provided template. NOTE: Currently, for reasons that
-    are unclear to me, any functions being called within your "fn" or "bounds" functions needs to be imported within
-    your functions. i.e., if your bounds are defined by "my_bounds", which makes a call somewhere to a numpy
-    function, you would need to do something like:
-
-    def my_bounds(data):
-        import numpy as np
-        [...]
-
-    This is obviously not ideal. I intend to push out a better solution for this ASAP.
+    Function carrying out generalized procedure for fitting a user-provided template.
 
     Parameters
     ----------

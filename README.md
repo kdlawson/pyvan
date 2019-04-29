@@ -6,7 +6,6 @@ A plot of the differences of log-likelihoods for fits of the three previously me
 ![](images/sim_scatters.png)
 The black dashed line denotes the threshold above which < 1% of any contaminant population is included, retaining ~66% of all simulated flare light-curves containing an event. The corresponding paper has been submitted, and is pending review --  but can be viewed online: https://arxiv.org/abs/1903.03240
 
-<<<<<<< HEAD
 A quick use example for the software (until I can get more proper examples online):
 =======
 [Template fitting in action](ANIMS.md)
@@ -25,7 +24,6 @@ Just clone this repository and install via 'setup.py', i.e. via command line:
 --------------------------------------------------------------------
 
 A quick use example for the software (or see a more in-depth example [here](examples/example_1.ipynb)):
->>>>>>> 6a61efc53b7abc25e11e618073257804f05e7d43
 
 --------------------------------------------------------------------
 

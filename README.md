@@ -17,36 +17,47 @@ Just clone this repository and install via 'setup.py', i.e. via command line:
 
 > `pip install .`
 
---------------------------------------------------------------------
+## Example
 
 A quick use example for the software (or see a more in-depth examples [here](examples/)):
 
 --------------------------------------------------------------------
 
-import glob \
-import numpy as np \
-import pyvan
+    import glob 
+    import numpy as np 
+    import pyvan
 
-lc_dir = '/my_lightcurves/' # Directory containing 3 column light-curve files (columns of time in days, mag, and mag error)
-lc_files = glob.glob(lc_dir+'*.dat')
-lightcurves = []
-for lc_file in lc_files:
-  lightcurves.append(np.genfromtxt(lc_file, skip_header=True, names=['mjd', 'mag', 'magErr']))
-
-tar_fits = pyvan.fit(lightcurves, n_cores=3, filt='g')\
-#fits all entries in 'lightcurves' for default templates using 3 processor cores and g-band filters where applicable (RR Lyrae in this case)\
-#The result is a dictionary containing an entry for each of the light-curves in the list "lightcurves"
-
---------------------------------------------------------------------
-
-#This can be saved for later using pickle\
-import pickle\
-pickle.dump(tar_fits, open('/my_dir/tar_fits.p','wb'))
+    lc_dir = '/my_lightcurves/' # Directory containing 3 column light-curve files (columns of time in days, mag, and mag error)
     
-#And can be loaded later with:\
-import pickle\
-tar_fits = pickle.load(open('/my_dir/tar_fits.p', 'rb'))
+    lc_files = glob.glob(lc_dir+'*.dat')
+    
+    lightcurves = []
+    
+    for lc_file in lc_files:
+      lightcurves.append(np.genfromtxt(lc_file, skip_header=True, names=['mjd', 'mag', 'magErr']))
+
+    tar_fits = pyvan.fit(lightcurves, n_cores=3, filt='g')
+    
+    # Fits all entries in 'lightcurves' for default templates using 3 processor cores and g-band filters where applicable (RR Lyrae in this case)
+    
+--------------------------------------------------------------------
+
+The result is a dictionary containing an entry with fit information for each of the light-curves in the list "lightcurves". For example, tar_fits[0]['flare'] contains information for the 1st light-curve's flare fit, while the comparison metrics for those fits is found in tar_fits[0]['rel_fit'] (where 'flare-quiescent' is the difference of the best-fit log likelihoods for those templates). See example notebooks or documentation for more information regarding the structure and contents of PyVAN's products.
 
 --------------------------------------------------------------------
 
-Each target's entry in the dictionary resulting above contains information regarding each of its fits (i.e. tar_fits[0]['flare'] contains information for the 1st light-curve's flare fit) and the comparison metrics for those fits (tar_fits[0]['rel_fit'], where flare-quiescent is the difference of the best-fit log likelihoods for those templates). Happy to help if anyone has questions.
+'tar_fits' can be saved for later using pickle:
+
+    import pickle
+    pickle.dump(tar_fits, open('/my_dir/tar_fits.p','wb'))
+
+--------------------------------------------------------------------
+
+And can be loaded later with:
+
+    import pickle
+    tar_fits = pickle.load(open('/my_dir/tar_fits.p', 'rb'))
+
+--------------------------------------------------------------------
+
+Happy to help if anyone has further questions.

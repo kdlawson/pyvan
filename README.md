@@ -19,7 +19,7 @@ Just clone this repository and install via 'setup.py', i.e. via command line:
 
 ## Example
 
-A quick use example for the software (or see a more in-depth examples [here](examples/)):
+A quick use example for the software (or see more in-depth examples [here](examples/)):
 
 --------------------------------------------------------------------
 

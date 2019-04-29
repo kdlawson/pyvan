@@ -8,19 +8,19 @@ import lmfit
 import warnings
 import pickle
 import glob
-import multiprocessing
 import pkg_resources
-from scipy.stats import sigmaclip,norm
+from scipy.stats import norm
 from scipy.interpolate import interp1d
 from scipy.optimize import curve_fit
 from copy import deepcopy
 from joblib import Parallel, delayed
-from scipy.stats import gaussian_kde, linregress
-import numpy as np
+from scipy.stats import gaussian_kde
 from matplotlib.widgets import Button
+
 warnings.filterwarnings(action='ignore', category=UserWarning, module='lmfit')
 # Suppresses an erroneous UserWarning from LMFit indicating that a keyword argument is being ignored when it isn't
 NoneType = type(None)
+
 
 def med_abs_dev(arr):
     """
@@ -29,11 +29,12 @@ def med_abs_dev(arr):
     """
     return np.median(abs(arr - np.median(arr))) / norm.ppf(3 / 4.)
 
+
 def get_cands(data):
     """
-    Default candidacy test for flares used in Lawson+(2019). Requires a flare event candidate have two consecutive bright
-    outlier observations, one of which is an outlier of 5+ median absolute deviations, and the second of which is an
-    outlier of at least 2.5 median absolute deviations.
+    Default candidacy test for flares used in Lawson+(2019). Requires a flare event candidate have two consecutive
+    bright outlier observations, one of which is an outlier of 5+ median absolute deviations, and the second of which
+    is an outlier of at least 2.5 median absolute deviations.
     """
     flare_cands = []
     thresh1 = -5.0  # Sigma Threshold required for first candidate point
@@ -66,6 +67,7 @@ def get_cands(data):
     peaks = np.array(find_apparent_peak_indices(data, flare_cands))
     return peaks[np.argsort(data['mag'][peaks])]
 
+
 def _default_failure_threshold(target_fits):
     """
     Default threshold function for truncating fitting on a target. Value of dl_fq_threshold is based on analysis in
@@ -79,8 +81,10 @@ def _default_failure_threshold(target_fits):
         if 'quiescent' in target_fits:
             dl_fq_threshold = 10.44  # Determined with simulation fitting, see: Lawson+(2019)
             if target_fits['flare']['logL'] - target_fits['quiescent']['logL'] < dl_fq_threshold:
-                return True  # If the flare and quiet fit have completed but fall below threshold dl_fq value, returns True
+                return True
+                # If the flare and quiet fit have completed but fall below threshold dl_fq value, returns True
     return False
+
 
 def fit(lightcurves, n_cores, filt, threshold=_default_failure_threshold, templates=None, obj_ids=None,
         fit_dict=None, flare_cands=get_cands, expt=60.):
@@ -136,20 +140,20 @@ def fit(lightcurves, n_cores, filt, threshold=_default_failure_threshold, templa
         A function that takes 'data' as it's argument, and returns a list of flare candidate indices for data. Set to
         'None' if not fitting for flares. If you're fitting some other template that requires specific candidate
         observations, it is recommended to use the option for passing a complete template fitting function as a template
-        to PyVAN. In this function, you can then check for candidates, returning a null fit if none are identified (as in
-        the procedure for flares, see: pyvan.fit_flares())
+        to PyVAN. In this function, you can then check for candidates, returning a null fit if none are identified (as
+        in the procedure for flares, see: pyvan.fit_flares())
 
     expt : float, optional
         The exposure time in seconds for observations in the light-curve. This parameter is only used for informing the
-        bounds for some templates (i.e. to avoid exploring flare fits with durations much smaller than our exposure time,
-        when we require two consecutive points in the flare for candidacy by default
+        bounds for some templates (e.g. to avoid exploring flare fits with durations much smaller than our exposure
+        time, when we require two consecutive points in the flare for candidacy by default)
 
     Returns
     -------
     fit_dict : dict
         Contains a key corresponding to a dictionary for each targets's fit that contained at least a single successful
-        template fit (i.e. for standard flare searches, any objects that lack a single flare candidate are not included).
-        See pyvan.fit_target() for detailed information regarding each target dictionary's contents.
+        template fit (i.e. for standard flare searches, any objects that lack a single flare candidate are not
+        included). See pyvan.fit_target() for detailed information regarding each target dictionary's contents.
     """
     if isinstance(templates, NoneType):
         templates = np.array(['flare', 'quiescent', 'rrlyrae'])
@@ -163,7 +167,7 @@ def fit(lightcurves, n_cores, filt, threshold=_default_failure_threshold, templa
     if isinstance(filt, NoneType) and 'rrlyrae' in templates:
         raise TypeError(
             "If the list of templates to be fit contains 'rrlyrae' (default), filter cannot be set to 'None'."
-            "Default filter options are 'u', 'g', 'r', 'i', or 'z'")
+            " Default filter options are 'u', 'g', 'r', 'i', or 'z'")
     results = Parallel(n_jobs=n_cores)(
         delayed(fit_target)(data, filt, threshold, templates, obj_id, flare_cands, expt)
         for data, obj_id in zip(lightcurves, obj_ids))
@@ -174,6 +178,7 @@ def fit(lightcurves, n_cores, filt, threshold=_default_failure_threshold, templa
             del fit_dict[key]['obj_id']
 
     return fit_dict
+
 
 def fit_target(data, filt, threshold=_default_failure_threshold, templates=None, obj_id=None, flare_cands=get_cands,
                expt=60.):
@@ -215,13 +220,13 @@ def fit_target(data, filt, threshold=_default_failure_threshold, templates=None,
         A function that takes 'data' as it's argument, and returns a list of flare candidate indices for data. Set to
         'None' if not fitting for flares. If you're fitting some other template that requires specific candidate
         observations, it is recommended to use the option for passing a complete template fitting function as a template
-        to PyVAN. In this function, you can then check for candidates, returning a null fit if none are identified (as in
-        the procedure for flares, see: pyvan.fit_flares())
+        to PyVAN. In this function, you can then check for candidates, returning a null fit if none are identified (as
+        in the procedure for flares, see: pyvan.fit_flares())
 
     expt : float, optional
         The exposure time in seconds for observations in the light-curve. This parameter is only used for informing the
-        bounds for some templates (i.e. to avoid exploring flare fits with durations much smaller than our exposure time,
-        when we require two consecutive points in the flare for candidacy by default
+        bounds for some templates (i.e. to avoid exploring flare fits with durations much smaller than our exposure
+        time, when we require two consecutive points in the flare for candidacy by default
 
     Returns
     -------
@@ -250,6 +255,11 @@ def fit_target(data, filt, threshold=_default_failure_threshold, templates=None,
     if isinstance(templates, NoneType):
         templates = np.array(['flare', 'quiescent', 'rrlyrae'])
 
+    if isinstance(filt, NoneType) and 'rrlyrae' in templates:
+        raise TypeError(
+            "If the list of templates to be fit contains 'rrlyrae' (default), filter cannot be set to 'None'."
+            " Default filter options are 'u', 'g', 'r', 'i', or 'z'")
+
     threshold_fail = False
     for template, i in zip(templates, range(len(templates))):
         if threshold_fail:
@@ -263,14 +273,14 @@ def fit_target(data, filt, threshold=_default_failure_threshold, templates=None,
             template_fit = fit_general(data, template['fn'], template['bounds'], template['args'])
             template = templates[i] = template['name']
         elif template == 'flare':
-            template_fit = fit_flares(data, expt=expt, flare_cands = flare_cands, N_concurrent = 3)
+            template_fit = fit_flares(data, expt=expt, flare_cands=flare_cands, N_concurrent=3)
         elif template == 'quiescent':
             template_fit = fit_quiescence(data)
         elif template == 'rrlyrae':
             template_fit = fit_rrlyrae(data, filt)
         else:
             raise TypeError('Entries of argument "templates" must either be: a string for default templates ("flare", '
-                            '"quiescent", or "rrlyrae"), a dictionary for user-defined templates to be fit using PyVANs '
+                            '"quiescent", or "rrlyrae"), a dictionary for user-defined templates to be fit using PyVANs'
                             'generalized template fitting procedure, or a callable function for templates to be fit '
                             'according to a user-defined procedure.')
         if template_fit['fit']:
@@ -288,15 +298,16 @@ def fit_target(data, filt, threshold=_default_failure_threshold, templates=None,
     target_fits['expt'] = expt
     if not isinstance(obj_id, NoneType):
         target_fits['obj_id'] = obj_id
-    target_fits['fit'] = (True if n_templates_fit > 0 else False)  # To later dump targets that weren't fit for any templates
+    target_fits['fit'] = (True if n_templates_fit > 0 else False)  # For dumping targets that weren't fit
     return target_fits
+
 
 def fit_general(data, fn, bounds, args):
     """
     Function carrying out generalized procedure for fitting a user-provided template. NOTE: Currently, for reasons that
-    are unclear to me, any functions being called within your "fn" or "bounds" functions needs to be imported within your
-    functions. i.e., if your bounds are defined by "my_bounds", which makes a call somewhere to a numpy function, you
-    would need to do something like:
+    are unclear to me, any functions being called within your "fn" or "bounds" functions needs to be imported within
+    your functions. i.e., if your bounds are defined by "my_bounds", which makes a call somewhere to a numpy
+    function, you would need to do something like:
 
     def my_bounds(data):
         import numpy as np
@@ -340,6 +351,7 @@ def fit_general(data, fn, bounds, args):
     fit_params = np.array([result.best_values[arg] for arg in args])
     chisq = result.chisqr
     return {'chisq': chisq, 'logL': log_likelihood(chisq, len(data)), 'params': fit_params, 'fit': True, 'fn': fn}
+
 
 def parse_lc_file_to_list(lc_path, dtypes=None, oid_col='obj_id', time_col='mjd', return_oids=True):
     """
@@ -397,24 +409,26 @@ def parse_lc_file_to_list(lc_path, dtypes=None, oid_col='obj_id', time_col='mjd'
 
     return lightcurves
 
+
 def find_apparent_t0(data, peak, m0, dm):
     """
     Used in initializing flare fit bounds for start time
     """
-    max_dt = 0.16 # Very long to be thorough
-    t_before, m_before = data['mjd'][:peak+1], data['mag'][:peak+1]
+    max_dt = 0.16  # Very long to be thorough
+    t_before, m_before = data['mjd'][:peak + 1], data['mag'][:peak + 1]
     for i in range(len(t_before)):
-        dt = t_before[-1] - t_before[-(1+i)]
-        if m_before[-(1+i)] > (m0 - 0.05*dm - np.std(data['mag'])) and dt < max_dt:
-            return t_before[-(1+i)]
+        dt = t_before[-1] - t_before[-(1 + i)]
+        if m_before[-(1 + i)] > (m0 - 0.05 * dm - np.std(data['mag'])) and dt < max_dt:
+            return t_before[-(1 + i)]
     return data['mjd'][peak] - max_dt
+
 
 def find_apparent_peak_indices(data, peak_candidates):
     """
     Used to help ensure best candidates for flare fitting.
     """
     peak_candidates = np.unique(peak_candidates)
-    seperate_events = np.split(peak_candidates, np.where((abs(np.diff(peak_candidates)) != 1))[0]+1)
+    seperate_events = np.split(peak_candidates, np.where((abs(np.diff(peak_candidates)) != 1))[0] + 1)
     peak_list = []
     for i in range(len(seperate_events)):
         event_mags = data['mag'][np.array(seperate_events[i]).astype(int)]
@@ -473,26 +487,29 @@ def tighten_flare_fit(input_fit_dict, copy=True):
     fit_dict['flare']['logL'] = log_likelihood(fit_dict['flare']['chisq'], len(data))
     return fit_dict
 
+
 def finer_time_resolution(params, data):
     """
     Used for plotting flare fits. Attempts to create an array of time values that has as few points as possible along
     the quiescence, but enough points for a smooth function during the flare events.
     """
-    params = params[1:] # drops the quiescence for ease of iteration
-    for i in range(len(params)/3):
-        k = i*3
-        t0, dt = params[k+0], params[k+1]
-        end_time = (t0+dt)+30*dt
-        flare = np.concatenate((np.linspace(t0-(0.25*dt), t0+dt, 200), np.linspace(t0+dt, end_time, 800)), axis=0)
+    params = params[1:]  # drops the quiescence for ease of iteration
+    for i in range(len(params) / 3):
+        k = i * 3
+        t0, dt = params[k + 0], params[k + 1]
+        end_time = (t0 + dt) + 30 * dt
+        flare = np.concatenate((np.linspace(t0 - (0.25 * dt), t0 + dt, 200), np.linspace(t0 + dt, end_time, 800)),
+                               axis=0)
         if i == 0:
-            qui_before = np.linspace(np.min(data['mjd']), t0, 10, endpoint = True)
-            qui_after = np.linspace(end_time, np.max(data['mjd']), 10, endpoint = True)
+            qui_before = np.linspace(np.min(data['mjd']), t0, 10, endpoint=True)
+            qui_after = np.linspace(end_time, np.max(data['mjd']), 10, endpoint=True)
             t = np.concatenate((qui_before, flare, qui_after), axis=0)
         else:
             t = np.concatenate((t, flare), axis=0)
     return np.sort(np.unique(t))
 
-def _flare_rise(T, dF): # Flare rise in fractional flux space
+
+def _flare_rise(T, dF):
     """
     Evaluates the rise phase for flares in fractional flux space and in rise-duration scaled times
         -- via Davenport+ (2014)
@@ -517,8 +534,9 @@ def _flare_rise(T, dF): # Flare rise in fractional flux space
     """
 
     co = [1.941, -0.175, -2.246, -1.125]
-    rise = (co[0]*T + co[1]*T**2 + co[2]*T**3 + co[3]*T**4) + 1.
-    return dF*rise
+    rise = (co[0] * T + co[1] * T ** 2 + co[2] * T ** 3 + co[3] * T ** 4) + 1.
+    return dF * rise
+
 
 def _flare_decay(T, dF):
     """
@@ -539,9 +557,10 @@ def _flare_decay(T, dF):
         The fractional fluxes for the flare rise phase evaluated at T
     """
 
-    co = [0.6890, -1.6000, 0.3030, -0.2783] # Davenport+ (2014) flare decay phase coefficients
-    decay = co[0]*np.exp(co[1]*T) + co[2]*np.exp(co[3]*T)
-    return dF*decay
+    co = [0.6890, -1.6000, 0.3030, -0.2783]  # Davenport+ (2014) flare decay phase coefficients
+    decay = co[0] * np.exp(co[1] * T) + co[2] * np.exp(co[3] * T)
+    return dF * decay
+
 
 def quiescence(t, qui):
     """
@@ -561,6 +580,7 @@ def quiescence(t, qui):
         The quiescent array corresponding to t
     """
     return np.repeat(qui, len(t))
+
 
 def _flarefn(t, t0, dt, dm, **kwargs):
     """
@@ -603,26 +623,27 @@ def _flarefn(t, t0, dt, dm, **kwargs):
         The magnitude array of the composite flare model evaluated at t
     """
 
-    T = (t - t0 - dt)/dt
-    
+    T = (t - t0 - dt) / dt
+
     model_out = np.zeros((2, len(T)))
-    
+
     if 'model_in' in kwargs.keys():
-        model_out[-1] = kwargs['model_in'] 
+        model_out[-1] = kwargs['model_in']
     elif 'm0' in kwargs.keys():
-        model_out[-1] = quiescence(T,  kwargs['m0'])
-    
-    dF = 2.512**dm - 1.
-    
+        model_out[-1] = quiescence(T, kwargs['m0'])
+
+    dF = 2.512 ** dm - 1.
+
     rise = (T <= 0) & (T >= -1)
     decay = (T > 0) & (T <= 30)
-    
-    model_out[0][rise] = _flare_rise(T[rise], dF = dF)
-    model_out[0][decay] = _flare_decay(T[decay], dF = dF)
-    
-    model_out[0] = -np.log10(model_out[0] + 1.)/np.log10(2.512) # Converts back to mags
-    
-    return np.sum(model_out, axis = 0)
+
+    model_out[0][rise] = _flare_rise(T[rise], dF=dF)
+    model_out[0][decay] = _flare_decay(T[decay], dF=dF)
+
+    model_out[0] = -np.log10(model_out[0] + 1.) / np.log10(2.512)  # Converts back to mags
+
+    return np.sum(model_out, axis=0)
+
 
 def _N_flare_model(t, m0, **model_pars):
     """
@@ -660,20 +681,21 @@ def _N_flare_model(t, m0, **model_pars):
         The magnitude array of the composite flare model evaluated at t
     """
 
-    N = len(list(model_pars.keys())[::3]) 
-    
-    model = np.zeros((N+1, len(t)))
-    model[-1] = quiescence(t,  m0)
-    
+    N = len(list(model_pars.keys())[::3])
+
+    model = np.zeros((N + 1, len(t)))
+    model[-1] = quiescence(t, m0)
+
     for i in range(N):
-        t0, dt, dm = model_pars['t0_'+str(i+1)], model_pars['dt_'+str(i+1)], model_pars['dm_'+str(i+1)]
+        t0, dt, dm = model_pars['t0_' + str(i + 1)], model_pars['dt_' + str(i + 1)], model_pars['dm_' + str(i + 1)]
         model[i] = _flarefn(t, t0, dt, dm)
-    
-    flare_model = np.sum(model, axis = 0)
-    
+
+    flare_model = np.sum(model, axis=0)
+
     return flare_model
 
-def fit_flares(data, expt, flare_cands = get_cands, N_concurrent = 3):
+
+def fit_flares(data, expt, flare_cands=get_cands, N_concurrent=3):
     """
     Carries out fitting of all flare candidates in a target light-curve.
 
@@ -713,47 +735,51 @@ def fit_flares(data, expt, flare_cands = get_cands, N_concurrent = 3):
         peaks = flare_cands
     if len(peaks) == 0:
         return {'fit': False, 'logL': np.nan}
-    expt = expt / 86400. # Converting from seconds to days
+    expt = expt / 86400.  # Converting from seconds to days
     N = (len(peaks) if len(peaks) <= N_concurrent else N_concurrent)
-    
+
     fit_params = []
     m0_init, m0_err, t0_init, dt_init, dm_init = initialize_flare_params(data, peaks)
     fmodel = lmfit.Model(_N_flare_model)
-    fmodel.set_param_hint('m0', vary = True, value = m0_init, min = (m0_init - 10*m0_err), max = (m0_init + 10*m0_err))
+    fmodel.set_param_hint('m0', vary=True, value=m0_init, min=(m0_init - 10 * m0_err), max=(m0_init + 10 * m0_err))
     for i in range(N):
-        fmodel.set_param_hint('t0_'+str(i+1), vary = True, value = t0_init[i], min = (t0_init[i] - 0.08), max = (t0_init[i] + dt_init[i] - expt))
-        fmodel.set_param_hint('dm_'+str(i+1), vary = True, value = dm_init[i], min = 0., max = (dm_init[i] + 5.))
-        fmodel.set_param_hint('dt_'+str(i+1), vary = True, value = dt_init[i], min = expt/5., max = 0.5)
-    
+        fmodel.set_param_hint('t0_' + str(i + 1), vary=True, value=t0_init[i], min=(t0_init[i] - 0.08),
+                              max=(t0_init[i] + dt_init[i] - expt))
+        fmodel.set_param_hint('dm_' + str(i + 1), vary=True, value=dm_init[i], min=0., max=(dm_init[i] + 5.))
+        fmodel.set_param_hint('dt_' + str(i + 1), vary=True, value=dt_init[i], min=expt / 5., max=0.5)
+
     suppressed_peaks = peaks[N:]
-    weights = 1./data['magErr']
+    weights = 1. / data['magErr']
     weights[suppressed_peaks] = 0.
-    result = fmodel.fit(data['mag'], t = data['mjd'], weights = weights, method = 'differential_evolution')
+    result = fmodel.fit(data['mag'], t=data['mjd'], weights=weights, method='differential_evolution')
     fit_params.append(result.best_values['m0'])
-    
+
     for i in range(N):
-        fit_params.append(result.best_values['t0_'+str(i+1)])
-        fit_params.append(result.best_values['dt_'+str(i+1)])
-        fit_params.append(result.best_values['dm_'+str(i+1)])
+        fit_params.append(result.best_values['t0_' + str(i + 1)])
+        fit_params.append(result.best_values['dt_' + str(i + 1)])
+        fit_params.append(result.best_values['dm_' + str(i + 1)])
     fit_params = np.array(fit_params)
     current_model = result.best_fit
-    
+
     if N < len(peaks):
         for i in range(N, len(peaks)):
             fmodel = lmfit.Model(_flarefn)
-            fmodel.set_param_hint('t0', vary = True, value = t0_init[i], min = (t0_init[i] - 0.08), max = (t0_init[i] + dt_init[i] - expt))
-            fmodel.set_param_hint('dm', vary = True, value = dm_init[i], min = 0., max = (dm_init[i] + 5.))
-            fmodel.set_param_hint('dt', vary = True, value = dt_init[i], min = expt/5., max = 0.5)
+            fmodel.set_param_hint('t0', vary=True, value=t0_init[i], min=(t0_init[i] - 0.08),
+                                  max=(t0_init[i] + dt_init[i] - expt))
+            fmodel.set_param_hint('dm', vary=True, value=dm_init[i], min=0., max=(dm_init[i] + 5.))
+            fmodel.set_param_hint('dt', vary=True, value=dt_init[i], min=expt / 5., max=0.5)
 
-            result = fmodel.fit(data['mag'], t= data['mjd'], weights = 1./data['magErr'], method = 'differential_evolution', model_in = current_model)
+            result = fmodel.fit(data['mag'], t=data['mjd'], weights=1. / data['magErr'],
+                                method='differential_evolution', model_in=current_model)
             fit_params = np.append(fit_params, result.best_values['t0'])
             fit_params = np.append(fit_params, result.best_values['dt'])
-            fit_params = np.append(fit_params, result.best_values['dm']) 
+            fit_params = np.append(fit_params, result.best_values['dm'])
             current_model = result.best_fit
     chisq = chi_squared(data['mag'], current_model, data['magErr'])
-    return {'chisq': chisq,'logL': log_likelihood(chisq, len(data)), 'params': fit_params, 'peaks': peaks, 'fit': True}
+    return {'chisq': chisq, 'logL': log_likelihood(chisq, len(data)), 'params': fit_params, 'peaks': peaks, 'fit': True}
 
-def get_flare_model(fit_dict, high_res = False):
+
+def get_flare_model(fit_dict, high_res=False):
     """
     Used to build a flare model from the fit dictionary of a flare candidate.
 
@@ -772,28 +798,28 @@ def get_flare_model(fit_dict, high_res = False):
     t : ndarray
         Times in days corresponding to the entries in 'm'
 
-    m : ndarray
+    model: ndarray
         Magnitudes for the flare model
-
     """
     params = fit_dict['flare']['params']
-    
+
     if high_res:
         t = finer_time_resolution(params, fit_dict['data'])
     else:
         t = fit_dict['data']['mjd']
 
-    n_flares = int((len(params)-1)/3)
+    n_flares = int((len(params) - 1) / 3)
     model_pars = {}
 
-    for i in range(n_flares):#t0, dm, dt
-        model_pars['t0_'+str(i+1)] = params[1:][i*3]
-        model_pars['dt_'+str(i+1)] = params[1:][i*3+1]
-        model_pars['dm_'+str(i+1)] = params[1:][i*3+2]
-    
+    for i in range(n_flares):  # t0, dm, dt
+        model_pars['t0_' + str(i + 1)] = params[1:][i * 3]
+        model_pars['dt_' + str(i + 1)] = params[1:][i * 3 + 1]
+        model_pars['dm_' + str(i + 1)] = params[1:][i * 3 + 2]
+
     model = _N_flare_model(t, params[0], **model_pars)
-    
+
     return [t, model]
+
 
 def initialize_flare_params(data, peaks):
     """
@@ -809,6 +835,7 @@ def initialize_flare_params(data, peaks):
         t0.append(find_apparent_t0(data, peaks[i], m0, dm[i]))
         dt.append(data['mjd'][peaks[i]] - t0[i])
     return m0, m0_err, t0, dt, dm
+
 
 def analytic_rrlyrae(t, t0, m0, dt, dm):
     """
@@ -841,7 +868,8 @@ def analytic_rrlyrae(t, t0, m0, dt, dm):
     """
     T = (t - t0) % dt / dt
     y = fn(T)
-    return dm*(y-1.) + m0
+    return dm * (y - 1.) + m0
+
 
 def rrlyrae_with_template(t, params, template):
     """
@@ -855,6 +883,9 @@ def rrlyrae_with_template(t, params, template):
     params : array-like
         Set of parameters at which to evaluate the template [t0, m0, dt, dm]
 
+    template: str
+        Template ID to use in creating the RR Lyrae model
+
     Returns
     -------
     : ndarray
@@ -866,7 +897,8 @@ def rrlyrae_with_template(t, params, template):
     t0, m0, dt, dm = params
     T = (t - t0) % dt / dt
     y = fn(T)
-    return dm*(y-1.) + m0
+    return dm * (y - 1.) + m0
+
 
 def rrl_bounds(data):
     """
@@ -875,15 +907,17 @@ def rrl_bounds(data):
     data. Though one might imagine constraining period and amplitude based on evidence in the data, this was found to
     produce more issues than it solved.
     """
-    t0_guess = data['mjd'][int(len(data)/2.)]
-    m0_guess = weighted_quantile(data['mag'], np.array([.95]), sample_weight = 1./data['magErr'], old_style=True)
+    t0_guess = data['mjd'][int(len(data) / 2.)]
+    m0_guess = weighted_quantile(data['mag'], np.array([.95]), sample_weight=1. / data['magErr'], old_style=True)
 
-    m0_range = m0_guess + np.array([-0.1, 1.5]) # ie  dimmest mag shouldn't be much brighter than dimmest 5th percentile,
-                                                # but could be much dimmer with sparse sampling
+    m0_range = m0_guess + np.array(
+        [-0.1, 1.5])  # ie  dimmest mag shouldn't be much brighter than dimmest 5th percentile,
+    # but could be much dimmer with sparse sampling
     dm_range = [0.1, 1.5]
     dt_range = [0.08, 1.6]
     t0_range = [(t0_guess - dt_range[1] / 2.), (t0_guess + dt_range[1] / 2.)]
     return [t0_range, m0_range, dt_range, dm_range]
+
 
 def fit_rrlyrae(data, filt, K=12):
     """
@@ -914,9 +948,8 @@ def fit_rrlyrae(data, filt, K=12):
 
             'fit', bool - indicates that the target was fit for RR Lyrae
     """
-
     template_ids = rrl_template_dict[filt]['ordered_keys']
-    
+
     n = len(data)
     t0_bounds, m0_bounds, dt_bounds, dm_bounds = rrl_bounds(data)
     init_vals = np.array([np.mean(t0_bounds), np.mean(m0_bounds), np.mean(dt_bounds), np.mean(dm_bounds)])
@@ -930,16 +963,17 @@ def fit_rrlyrae(data, filt, K=12):
         global fn
         fn = rrl_template_dict[filt][template_ids[i]]
         fmodel = lmfit.Model(analytic_rrlyrae)
-        fmodel.set_param_hint('t0', vary = True, value = vals[0], min = t0_bounds[0], max = t0_bounds[1])
-        fmodel.set_param_hint('m0', vary = True, value = vals[1], min = m0_bounds[0], max = m0_bounds[1])
-        fmodel.set_param_hint('dt', vary = True, value = vals[2], min = dt_bounds[0], max = dt_bounds[1])
-        fmodel.set_param_hint('dm', vary = True, value = vals[3], min = dm_bounds[0], max = dm_bounds[1])
+        fmodel.set_param_hint('t0', vary=True, value=vals[0], min=t0_bounds[0], max=t0_bounds[1])
+        fmodel.set_param_hint('m0', vary=True, value=vals[1], min=m0_bounds[0], max=m0_bounds[1])
+        fmodel.set_param_hint('dt', vary=True, value=vals[2], min=dt_bounds[0], max=dt_bounds[1])
+        fmodel.set_param_hint('dm', vary=True, value=vals[3], min=dm_bounds[0], max=dm_bounds[1])
         if i == 0:
             zeroth_params = []
             zeroth_chisqs = []
             zeroth_logL = []
             for _ in range(K):
-                result = fmodel.fit(data['mag'], t = data['mjd'], weights = 1./data['magErr'], method = 'differential_evolution')
+                result = fmodel.fit(data['mag'], t=data['mjd'], weights=1. / data['magErr'],
+                                    method='differential_evolution')
                 zeroth_chisqs.append(result.chisqr)
                 zeroth_logL.append(log_likelihood(result.chisqr, n))
                 zeroth_params.append(lmfit_params_to_list(result.best_values, ['t0', 'm0', 'dt', 'dm']))
@@ -950,14 +984,15 @@ def fit_rrlyrae(data, filt, K=12):
             fit_params.append(vals)
 
         else:
-            result = fmodel.fit(data['mag'], t=data['mjd'], weights = 1./data['magErr'])
+            result = fmodel.fit(data['mag'], t=data['mjd'], weights=1. / data['magErr'])
             chisq_list.append(result.chisqr)
             logL_list.append(log_likelihood(result.chisqr, len(data)))
             vals = lmfit_params_to_list(result.best_values, ['t0', 'm0', 'dt', 'dm'])
             fit_params.append(vals)
     best_index = np.argmax(np.array(logL_list))
-    return {'chisq': chisq_list[best_index], 'logL': log_likelihood(chisq_list[best_index], len(data)), 
-        'params': fit_params[best_index], 'template': template_ids[best_index], 'fit': True}
+    return {'chisq': chisq_list[best_index], 'logL': log_likelihood(chisq_list[best_index], len(data)),
+            'params': fit_params[best_index], 'template': template_ids[best_index], 'fit': True}
+
 
 def fit_quiescence(data):
     """
@@ -982,9 +1017,10 @@ def fit_quiescence(data):
 
     """
     n = len(data)
-    popt, _pcov = curve_fit(quiescence, data['mjd'], data['mag'], sigma = data['magErr'])
+    popt, _pcov = curve_fit(quiescence, data['mjd'], data['mag'], sigma=data['magErr'])
     chisq = chi_squared(data['mag'], quiescence(data['mjd'], popt[0]), data['magErr'])
-    return {'chisq': chisq , 'logL': log_likelihood(chisq, n), 'param': popt[0], 'fit': True}
+    return {'chisq': chisq, 'logL': log_likelihood(chisq, n), 'param': popt[0], 'fit': True}
+
 
 def lmfit_params_to_list(best_params, param_names):
     """
@@ -995,18 +1031,21 @@ def lmfit_params_to_list(best_params, param_names):
         par_list.append(best_params[param])
     return par_list
 
+
 def chi_squared(y_obs, y_model, error):
     """
     Computes the chi-squared value for observations "y_obs" with uncertainties "error" fit with model "y_model".
     """
     residuals = y_obs - y_model
-    return np.sum((residuals / error)**2)
+    return np.sum((residuals / error) ** 2)
+
 
 def log_likelihood(chisq, n):
     """
     Computes the log-likelihood of a fit from the chi-squared value and the number of observations.
     """
-    return (-n/2.)*np.log(chisq/n)
+    return (-n / 2.) * np.log(chisq / n)
+
 
 def weighted_quantile(values, quantiles, sample_weight=None, values_sorted=False, old_style=False):
     """ Vectorized computation of weighted quantiles, courtesy of user Alleo on stackoverflow:
@@ -1038,11 +1077,13 @@ def weighted_quantile(values, quantiles, sample_weight=None, values_sorted=False
         weighted_quantiles /= np.sum(sample_weight)
     return np.interp(quantiles, weighted_quantiles, values)
 
+
 def med_err(arr):
     """
     Computes the standard error on the median for an array of values.
     """
-    return np.std(arr)/np.sqrt(len(arr))
+    return np.std(arr) / np.sqrt(len(arr))
+
 
 def make_template_dict():
     """
@@ -1063,23 +1104,25 @@ def make_template_dict():
         keys corresponding to the array of RR Lyrae templates from the source
     """
     data_path = pkg_resources.resource_filename('pyvan', 'rrlyr_templates/')
-    all_template_files = glob.glob(data_path+'*.dat')
+    all_template_files = glob.glob(data_path + '*.dat')
     filters = np.unique([x.split('/')[-1].split('.')[0][-1] for x in all_template_files])
     fn_dict = {}
     for filt in filters:
         fn_dict[filt] = {}
-        template_files = glob.glob(data_path+'*'+filt+'.dat')
-        template_ids, t_idx = sort_template_ids([x.split('/')[-1].split('.')[0] for x in template_files], return_index = True)
+        template_files = glob.glob(data_path + '*' + filt + '.dat')
+        template_ids, t_idx = sort_template_ids([x.split('/')[-1].split('.')[0] for x in template_files],
+                                                return_index=True)
         template_files = np.asarray(template_files)[t_idx]
         fn_dict[filt]['ordered_keys'] = template_ids
         for i in range(len(template_ids)):
             t, y = np.loadtxt(template_files[i]).T
-            tlong = np.concatenate([t, [t[0]+1.]])
+            tlong = np.concatenate([t, [t[0] + 1.]])
             ylong = np.concatenate([y, [y[0]]])
             fn_dict[filt][template_ids[i]] = interp1d(tlong, ylong, kind='cubic')
     return fn_dict
 
-def sort_template_ids(template_ids, return_index = True):
+
+def sort_template_ids(template_ids, return_index=True):
     """
     Sorts template IDs to flow well in terms of steepness --- helps pyvan.fit_rrlyrae() converge well, and improves
     efficiency quite a bit (over just using differential evolution to fit each template individually).
@@ -1090,16 +1133,16 @@ def sort_template_ids(template_ids, return_index = True):
         return np.asarray(template_ids)[tn_idx], tn_idx
     return np.asarray(template_ids)[tn_idx]
 
+
 rrl_template_dict = make_template_dict()
 
-NoneType = type(None)
 
 def save_buttons(buttons):
     global button_save
     button_save = buttons
 
 
-def plot_all_fits(tar_fit, high_res=True, templates=None, xrange=None, yrange=None, donor_lightcurve=None):
+def plot_all_fits(tar_fit, high_res=True, templates=None, x_range=None, y_range=None, donor_lightcurve=None):
     """
     Takes the fit dictionary for a target and displays a light-curve along with widget buttons to overlay any desired
     model fits. Best used in a Jupyter Notebook (I have not tested this in other environments!). Make sure to enable
@@ -1119,7 +1162,7 @@ def plot_all_fits(tar_fit, high_res=True, templates=None, xrange=None, yrange=No
 
     high_res : bool, optional
         If True, will evaluate the best-fit models at very fine time resolution to produce smooth models. If False,
-        evaluates models at the observation timestamps.
+        evaluates models at the observed times only.
 
     templates : list, optional
         A list of templates for which to display models. Elements may be: strings for default templates ('flare',
@@ -1138,11 +1181,11 @@ def plot_all_fits(tar_fit, high_res=True, templates=None, xrange=None, yrange=No
         only display 7 templates at a time. If passed more than 7 entries in "templates", the list is truncated to only
         the display the first 7. Default is 'None', which simply plots the default templates.
 
-    xrange : tuple, optional
+    x_range : tuple, optional
         Tuple containing minimum and maximum x-axis values as (xmin,xmax) for framing the plot. By default, the extent
         of the best-fitting template determines this boundary
 
-    yrange : tuple, optional
+    y_range : tuple, optional
         Tuple containing minimum and maximum y-axis values as (ymin,ymax) for framing the plot. By default, the extent
         of the best-fitting template determines this boundary. Note: if you want an inverted magnitude axis, simply
         invert your tuple.
@@ -1256,6 +1299,10 @@ def plot_all_fits(tar_fit, high_res=True, templates=None, xrange=None, yrange=No
         ax.errorbar(data['mjd'], data['mag'], yerr=data['magErr'], linestyle="None", c='black', zorder=2, capthick=2,
                     capsize=10, elinewidth=2)
 
+    else:
+        raise TypeError('If "donor_lightcurve" is specified, it must be None or a numpy structured array having columns'
+                        ' "mjd", "mag", and "magErr")')
+
     best = np.argmax(logL_arr)
     [line] = ax.plot(t_list[best], y_list[best], c='orange', lw=2., label='Fit to Data', zorder=1, alpha=0.8)
 
@@ -1339,11 +1386,11 @@ def plot_all_fits(tar_fit, high_res=True, templates=None, xrange=None, yrange=No
                      prop={'family': 'Serif', 'size': 12}, edgecolor='black', facecolor=axis_color, fancybox=False)
     lgnd.get_frame().set_linewidth(border_width)
 
-    if not isinstance(xrange, NoneType):
-        ax.set_xlim(xrange[0], xrange[1])
+    if not isinstance(x_range, NoneType):
+        ax.set_xlim(x_range[0], x_range[1])
 
-    if not isinstance(yrange, NoneType):
-        ax.set_ylim(yrange[0], yrange[1])
+    if not isinstance(y_range, NoneType):
+        ax.set_ylim(y_range[0], y_range[1])
 
     plt.show()
     save_buttons(buttons)

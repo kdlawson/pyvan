@@ -3,7 +3,7 @@
 from setuptools import setup
 
 setup(name='pyvan',
-      version='0.9.1',
+      version='0.9.2',
       description='For assessment and classification of potentially variable stellar light-curves',
       author='Kellen D Lawson',
       author_email='kellenlawson@gmail.com',
@@ -11,5 +11,5 @@ setup(name='pyvan',
       packages=['pyvan'],
       package_dir={'pyvan': 'pyvan'},
       package_data={'pyvan': ['rrlyr_templates/*.dat', 'example_data/*.dat']},
-      install_requires=['lmfit','matplotlib','numpy','multiprocessing','scipy','joblib']
+      install_requires=['lmfit','matplotlib','numpy','scipy','joblib']
       )

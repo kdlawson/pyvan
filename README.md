@@ -6,13 +6,32 @@ A plot of the differences of log-likelihoods for fits of the three previously me
 ![](images/sim_scatters.png)
 The black dashed line denotes the threshold above which < 1% of any contaminant population is included, retaining ~66% of all simulated flare light-curves containing an event. The corresponding paper has been submitted, and is pending review --  but can be viewed online: https://arxiv.org/abs/1903.03240
 
+<<<<<<< HEAD
 A quick use example for the software (until I can get more proper examples online):
+=======
+[Template fitting in action](ANIMS.md)
+
+--------------------------------------------------------------------
+## Installation
+
+Just clone this repository and install via 'setup.py', i.e. via command line:
+
+> `git clone https://github.com/kdlawson/pyvan`
+
+> `cd pyvan`
+
+> `pip install .`
+
+--------------------------------------------------------------------
+
+A quick use example for the software (or see a more in-depth example [here](examples/example_1.ipynb)):
+>>>>>>> 6a61efc53b7abc25e11e618073257804f05e7d43
 
 --------------------------------------------------------------------
 
 import pickle \
 import numpy as np \
-import pyvan.pyvan as pyvan \
+import pyvan.pyvan as pyvan
 
 lightcurves = pickle.load(open('lightcurves.p', 'rb' ) )\
 #a pickled list where each entry is a numpy structured array with column keys: 'mjd', 'mag', 'magErr' (time, magnitude, and mag error)
@@ -24,6 +43,3 @@ tar_fits = pyvan.fit(lightcurves, n_cores=3, filt='g')\
 --------------------------------------------------------------------
 
 Each target's entry in the dictionary resulting above contains information regarding each of its fits (i.e. tar_fits[0]['flare'] contains information for the 1st light-curve's flare fit) and the comparison metrics for those fits (tar_fits[0]['rel_fit'], where flare-quiescent is the difference of the best-fit log likelihoods for those templates). Happy to help if anyone has questions.
-
-
-Take a look in the "examples" directory for a Jupyter Notebook walkthrough of the basic functionalities!

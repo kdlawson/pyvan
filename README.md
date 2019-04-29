@@ -23,16 +23,29 @@ A quick use example for the software (or see a more in-depth examples [here](exa
 
 --------------------------------------------------------------------
 
-import pickle \
+import glob \
 import numpy as np \
-import pyvan.pyvan as pyvan
+import pyvan
 
-lightcurves = pickle.load(open('lightcurves.p', 'rb' ) )\
-#a pickled list where each entry is a numpy structured array with column keys: 'mjd', 'mag', 'magErr' (time, magnitude, and mag error)
+lc_dir = '/my_lightcurves/' # Directory containing 3 column light-curve files (columns of time in days, mag, and mag error)
+lc_files = glob.glob(lc_dir+'*.dat')
+lightcurves = []
+for lc_file in lc_files:
+  lightcurves.append(np.genfromtxt(lc_file, skip_header=True, names=['mjd', 'mag', 'magErr']))
 
 tar_fits = pyvan.fit(lightcurves, n_cores=3, filt='g')\
-#fits all entries in 'lightcurves' for default templates using 3 processor cores and g-band filters where applicable (RR Lyrae in this case) \
-#This results in a dictionary containing an entry for each target. 
+#fits all entries in 'lightcurves' for default templates using 3 processor cores and g-band filters where applicable (RR Lyrae in this case)\
+#The result is a dictionary containing an entry for each of the light-curves in the list "lightcurves"
+
+--------------------------------------------------------------------
+
+#This can be saved for later using pickle\
+import pickle\
+pickle.dump(tar_fits, open('/my_dir/tar_fits.p','wb'))
+    
+#And can be loaded later with:\
+import pickle\
+tar_fits = pickle.load(open('/my_dir/tar_fits.p', 'rb'))
 
 --------------------------------------------------------------------
 

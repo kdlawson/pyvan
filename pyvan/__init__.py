@@ -1,1 +1,1 @@
-from pyvan import *
+from .pyvan import *

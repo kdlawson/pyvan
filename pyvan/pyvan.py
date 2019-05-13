@@ -68,7 +68,7 @@ def get_cands(data):
     return peaks[np.argsort(data['mag'][peaks])]
 
 
-def _default_failure_threshold(target_fits):
+def default_failure_threshold(target_fits):
     """
     Default threshold function for truncating fitting on a target. Value of dl_fq_threshold is based on analysis in
     Lawson+(2019). Returns True if the procedure is to skip further fits. Additionally requires that the flare fit
@@ -86,7 +86,7 @@ def _default_failure_threshold(target_fits):
     return False
 
 
-def fit(lightcurves, n_cores, filt, threshold=_default_failure_threshold, templates=None, obj_ids=None,
+def fit(lightcurves, n_cores, filt, threshold=default_failure_threshold, templates=None, obj_ids=None,
         fit_dict=None, flare_cands=get_cands, expt=60.):
     """
     PyVAN's core process. This takes a list containing light-curves and fits them with templates as desired,
@@ -112,7 +112,7 @@ def fit(lightcurves, n_cores, filt, threshold=_default_failure_threshold, templa
 
     threshold : callable, optional
         A function to which the current dictionary of fit templates is passed after each is completed, returning True if
-        the procedure is to be truncated. By default, uses '_default_failure_threshold', which truncates fitting if the
+        the procedure is to be truncated. By default, uses 'default_failure_threshold', which truncates fitting if the
         value of dl_fq is too small, or if no flare candidates were identified. This should be changed to None or a
         different user-defined function if not using flare, quiet, and at least a third template (RR Lyr by default),
         or even potentially if working with very different data quality.
@@ -180,7 +180,7 @@ def fit(lightcurves, n_cores, filt, threshold=_default_failure_threshold, templa
     return fit_dict
 
 
-def fit_target(data, filt, threshold=_default_failure_threshold, templates=None, obj_id=None, flare_cands=get_cands,
+def fit_target(data, filt, threshold=default_failure_threshold, templates=None, obj_id=None, flare_cands=get_cands,
                expt=60.):
     """
     Carries out fitting of the requested templates on a light-curve. Use pyvan.fit() to fit many targets at once with
@@ -200,7 +200,7 @@ def fit_target(data, filt, threshold=_default_failure_threshold, templates=None,
 
     threshold : callable, optional
         A function to which the current dictionary of fit templates is passed after each is completed, returning True if
-        the procedure is to be truncated. By default, uses '_default_failure_threshold', which truncates fitting if the
+        the procedure is to be truncated. By default, uses 'default_failure_threshold', which truncates fitting if the
         value of dl_fq is too small, or if no flare candidates were identified. This should be changed to None or a
         different user-defined function if not using flare, quiet, and at least a third template (RR Lyr by default),
         or even potentially if working with very different data quality.
@@ -458,7 +458,7 @@ def tighten_flare_fit(input_fit_dict, copy=True):
         suppressed_peaks = peaks[peaks != peaks[i]]
         weights[suppressed_peaks] = 0
         for j in np.linspace(0.0001, 5, 20):
-            fmodel = lmfit.Model(_flarefn)
+            fmodel = lmfit.Model(flarefn)
             fmodel.set_param_hint('t0', vary=True, value=t0_init[i], min=(t0_init[i] - 0.08),
                                   max=(t0_init[i] + dt_init[i] - expt))
             dm_min = 0.
@@ -485,7 +485,7 @@ def finer_time_resolution(params, data):
     the quiescence, but enough points for a smooth function during the flare events.
     """
     params = params[1:]  # drops the quiescence for ease of iteration
-    for i in range(len(params) / 3):
+    for i in range(int(len(params) / 3)):
         k = i * 3
         t0, dt = params[k + 0], params[k + 1]
         end_time = (t0 + dt) + 30 * dt
@@ -500,7 +500,7 @@ def finer_time_resolution(params, data):
     return np.sort(np.unique(t))
 
 
-def _flare_rise(T, dF):
+def flare_rise(T, dF):
     """
     Evaluates the rise phase for flares in fractional flux space and in rise-duration scaled times
         -- via Davenport+ (2014)
@@ -529,7 +529,7 @@ def _flare_rise(T, dF):
     return dF * rise
 
 
-def _flare_decay(T, dF):
+def flare_decay(T, dF):
     """
     Evaluates the decay phase for flares in fractional flux space and in rise-duration scaled times
         -- via Davenport+ (2014)
@@ -573,7 +573,7 @@ def quiescence(t, qui):
     return np.repeat(qui, len(t))
 
 
-def _flarefn(t, t0, dt, dm, **kwargs):
+def flarefn(t, t0, dt, dm, **kwargs):
     """
     Used internally by the main flare fitting algorithm ('fit_flares') to iteratively
     append flares (in excess of the N_concurrent parameter in fit_flares) to the previous model,
@@ -628,15 +628,15 @@ def _flarefn(t, t0, dt, dm, **kwargs):
     rise = (T <= 0) & (T >= -1)
     decay = (T > 0) & (T <= 30)
 
-    model_out[0][rise] = _flare_rise(T[rise], dF=dF)
-    model_out[0][decay] = _flare_decay(T[decay], dF=dF)
+    model_out[0][rise] = flare_rise(T[rise], dF=dF)
+    model_out[0][decay] = flare_decay(T[decay], dF=dF)
 
     model_out[0] = -np.log10(model_out[0] + 1.) / np.log10(2.512)  # Converts back to mags
 
     return np.sum(model_out, axis=0)
 
 
-def _N_flare_model(t, m0, **model_pars):
+def N_flare_model(t, m0, **model_pars):
     """
     Computes a composite flare model for given time array, quiescent magnitude,
     and set of flare parameters. 
@@ -679,7 +679,7 @@ def _N_flare_model(t, m0, **model_pars):
 
     for i in range(N):
         t0, dt, dm = model_pars['t0_' + str(i + 1)], model_pars['dt_' + str(i + 1)], model_pars['dm_' + str(i + 1)]
-        model[i] = _flarefn(t, t0, dt, dm)
+        model[i] = flarefn(t, t0, dt, dm)
 
     flare_model = np.sum(model, axis=0)
 
@@ -731,7 +731,7 @@ def fit_flares(data, expt, flare_cands=get_cands, N_concurrent=3):
 
     fit_params = []
     m0_init, m0_err, t0_init, dt_init, dm_init = initialize_flare_params(data, peaks)
-    fmodel = lmfit.Model(_N_flare_model)
+    fmodel = lmfit.Model(N_flare_model)
     fmodel.set_param_hint('m0', vary=True, value=m0_init, min=(m0_init - 10 * m0_err), max=(m0_init + 10 * m0_err))
     for i in range(N):
         fmodel.set_param_hint('t0_' + str(i + 1), vary=True, value=t0_init[i], min=(t0_init[i] - 0.08),
@@ -754,7 +754,7 @@ def fit_flares(data, expt, flare_cands=get_cands, N_concurrent=3):
 
     if N < len(peaks):
         for i in range(N, len(peaks)):
-            fmodel = lmfit.Model(_flarefn)
+            fmodel = lmfit.Model(flarefn)
             fmodel.set_param_hint('t0', vary=True, value=t0_init[i], min=(t0_init[i] - 0.08),
                                   max=(t0_init[i] + dt_init[i] - expt))
             fmodel.set_param_hint('dm', vary=True, value=dm_init[i], min=0., max=(dm_init[i] + 5.))
@@ -807,7 +807,7 @@ def get_flare_model(fit_dict, high_res=False):
         model_pars['dt_' + str(i + 1)] = params[1:][i * 3 + 1]
         model_pars['dm_' + str(i + 1)] = params[1:][i * 3 + 2]
 
-    model = _N_flare_model(t, params[0], **model_pars)
+    model = N_flare_model(t, params[0], **model_pars)
 
     return [t, model]
 
@@ -1008,7 +1008,7 @@ def fit_quiescence(data):
 
     """
     n = len(data)
-    popt, _pcov = curve_fit(quiescence, data['mjd'], data['mag'], sigma=data['magErr'])
+    popt, _ = curve_fit(quiescence, data['mjd'], data['mag'], sigma=data['magErr'])
     chisq = chi_squared(data['mag'], quiescence(data['mjd'], popt[0]), data['magErr'])
     return {'chisq': chisq, 'logL': log_likelihood(chisq, n), 'param': popt[0], 'fit': True}
 
@@ -1359,7 +1359,7 @@ def plot_all_fits(tar_fit, high_res=True, templates=None, x_range=None, y_range=
             label += ' ($\ell =$' + str(np.round(logL_arr[i], 1)) + ')'
         b_bottom = mpt - b_space / 2. + i * (b_height + b_gap)
         button_ax = fig.add_axes([b_left, b_bottom, b_width, b_height])
-        [border.set_linewidth(border_width) for border in button_ax.spines.itervalues()]
+        [button_ax.spines[border].set_linewidth(border_width) for border in button_ax.spines]
         button_i = Button(button_ax, label, color=axis_color, hovercolor='0.925')
         button_i.on_clicked(button_fns[i])
         buttons.append(button_i)
@@ -1371,7 +1371,7 @@ def plot_all_fits(tar_fit, high_res=True, templates=None, x_range=None, y_range=
 
     ax.tick_params(axis='both', which='major', labelsize=14, right=True, top=True, direction='in', length=10,
                    width=border_width, pad=5, zorder=0)
-    [border.set_linewidth(border_width) for border in ax.spines.itervalues()]
+    [ax.spines[border].set_linewidth(border_width) for border in ax.spines]
 
     lgnd = ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=ncol, framealpha=1.,
                      prop={'family': 'Serif', 'size': 12}, edgecolor='black', facecolor=axis_color, fancybox=False)
@@ -1473,7 +1473,7 @@ def logL_kde_scatter(fit_dict, x_param='flare-quiescent', y_param='flare-rrlyrae
     if not isinstance(y_range, NoneType):
         ax.set_ylim(y_range[0], y_range[1])
 
-    [border.set_linewidth(border_width) for border in ax.spines.itervalues()]
+    [ax.spines[border].set_linewidth(border_width) for border in ax.spines]
 
     sct = ax.scatter([], [], c=[], cmap=kde_cmap, edgecolor='', norm=mpl.colors.Normalize(vmin=0.0, vmax=1.))
     cb_ax = fig.add_axes([0.885, 0.11, 0.026, 0.77])

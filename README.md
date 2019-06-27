@@ -1,5 +1,5 @@
 # pyvan
-PyVAN is a Python package (should work for both Python 2.x and 3.x now) for assessing stellar flare candidate light-curves, especially suited to irregularly sampled light-curves of ground based astronomical surveys. The software takes a set of light-curve templates corresponding to both a type of variable you want to identify and to common contaminants. It then searches each candidate light-curve over a range of plausible template paramaters for the fit of each template most likely to have produced the observations. By comparing the likelihoods of these best-fits with one another, users can identify the light-curves that are both most likely to result from the astrophysical phenomenon of interest, and least likely to result from contaminants. By default, the software fits for flare, RR Lyrae, and quiet templates, and was created for identification of flares. However, additional functions allow capabilities for any templates that might interest you --- the docstrings for the most important (IMO) functions are pretty thorough and should help in this respect. However, I'll have some relevant examples added ASAP.
+PyVAN is a Python package (Python 2.7 and 3) for assessing stellar flare candidate light-curves, especially suited to irregularly sampled light-curves of ground based astronomical surveys. The software takes a set of light-curve templates corresponding to both a type of variable you want to identify and to common contaminants. It then searches each candidate light-curve over a range of plausible template paramaters for the fit of each template most likely to have produced the observations. By comparing the likelihoods of these best-fits with one another, users can identify the light-curves that are both most likely to result from the astrophysical phenomenon of interest, and least likely to result from contaminants. By default, the software fits for flare, RR Lyrae, and quiet templates, and was created for identification of flares. However, additional functions allow capabilities for any templates that might interest you --- the docstrings for the most important (IMO) functions are pretty thorough and should help in this respect. The [included example notebooks](examples/) should also help you to get started.
 
 A plot of the differences of log-likelihoods for fits of the three previously mentioned templates to flare and contaminant data simulated by inducing ground-based survey quality and sampling in Kepler light-curves of known identity:
 
@@ -9,13 +9,15 @@ The black dashed line denotes the threshold above which < 1% of any contaminant 
 --------------------------------------------------------------------
 ## Installation
 
-Just clone this repository and install via 'setup.py', i.e. via command line:
+Clone this repository and install via 'setup.py'
 
-> `git clone https://github.com/kdlawson/pyvan`
+E.g. from command line:
 
-> `cd pyvan`
+    git clone https://github.com/kdlawson/pyvan.git
 
-> `pip install .`
+    cd pyvan
+
+    pip install .
 
 ## Example
 
@@ -34,7 +36,7 @@ A quick use example for the software (or see more in-depth examples [here](examp
     lightcurves = []
     
     for lc_file in lc_files:
-      lightcurves.append(np.genfromtxt(lc_file, skip_header=True, names=['mjd', 'mag', 'magErr']))
+      lightcurves.append(np.genfromtxt(lc_file, names=['mjd', 'mag', 'magErr']))
 
     tar_fits = pyvan.fit(lightcurves, n_cores=3, filt='g')
     
@@ -42,7 +44,7 @@ A quick use example for the software (or see more in-depth examples [here](examp
     
 --------------------------------------------------------------------
 
-The result is a dictionary containing an entry with fit information for each of the light-curves in the list "lightcurves". For example, tar_fits[0]['flare'] contains information for the 1st light-curve's flare fit, while the comparison metrics for those fits is found in tar_fits[0]['rel_fit'] (where 'flare-quiescent' is the difference of the best-fit log likelihoods for those templates). See example notebooks or documentation for more information regarding the structure and contents of PyVAN's products.
+The result is a dictionary containing an entry with fit information for each of the light-curves in the list "lightcurves". For example, tar_fits[0]['flare'] contains information for the 1st light-curve's flare fit, while the comparison metrics for those fits are found in tar_fits[0]['rel_fit'] (where 'flare-quiescent' is the difference of the best-fit log likelihoods for those templates). See example notebooks or documentation for more information regarding the structure and contents of PyVAN's products.
 
 --------------------------------------------------------------------
 
